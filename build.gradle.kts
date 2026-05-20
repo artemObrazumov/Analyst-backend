@@ -29,7 +29,6 @@ dependencies {
   implementation(ktorLibs.server.statusPages)
   implementation(ktorLibs.server.callLogging)
   implementation(ktorLibs.server.metrics.micrometer)
-  implementation(ktorLibs.server.openapi)
   implementation(ktorLibs.server.swagger)
   implementation(ktorLibs.server.requestValidation)
   implementation(ktorLibs.server.rateLimit)
@@ -65,3 +64,73 @@ dependencies {
   testImplementation(kotlin("test"))
   testImplementation(ktorLibs.server.testHost)
 }
+
+// ── Flyway migrations ─────────────────────────────────────────────────────────
+
+val dbUrl = project.findProperty("db.url") as? String ?: "jdbc:postgresql://localhost:5432/analytics"
+val dbUser = project.findProperty("db.user") as? String ?: "analytics"
+val dbPassword = project.findProperty("db.password") as? String ?: "secret"
+
+tasks.register<JavaExec>("dbMigrate") {
+  group = "database"
+  description = "Run Flyway migrations against the local database"
+  dependsOn("classes")
+  classpath = sourceSets["main"].runtimeClasspath
+  mainClass = "com.artemobraz.MigrateDbKt"
+  environment("DB_URL", dbUrl)
+  environment("DB_USER", dbUser)
+  environment("DB_PASSWORD", dbPassword)
+}
+
+// ── Docker via Podman ─────────────────────────────────────────────────────────
+
+val podmanMachine = project.findProperty("podmanMachine") as? String ?: "default"
+val composeFile = "${rootProject.projectDir.parent}/docker-compose.yml"
+
+fun podmanQuery(machine: String, format: String): String {
+  val proc = ProcessBuilder("podman", "machine", "inspect", machine, "--format", format).start()
+  val output = proc.inputStream.bufferedReader().readText().trim()
+  proc.waitFor()
+  return output
+}
+
+fun podmanDockerHost(machine: String): String {
+  val sock = podmanQuery(machine, "{{.ConnectionInfo.PodmanSocket.Path}}")
+  return "unix://$sock"
+}
+
+tasks.register("dockerUp") {
+  group = "docker"
+  description = "Start dev services (Postgres, Redis) via Podman"
+  doLast {
+    val state = podmanQuery(podmanMachine, "{{.State}}")
+    if (state != "running") {
+      println("Podman machine '$podmanMachine' is '$state' — starting...")
+      val code = ProcessBuilder("podman", "machine", "start", podmanMachine)
+        .inheritIO().start().waitFor()
+      // 125 = already running (race condition), treat as success
+      if (code != 0 && code != 125) throw GradleException("podman machine start failed (exit $code)")
+    }
+
+    val dockerHost = podmanDockerHost(podmanMachine)
+    val code = ProcessBuilder("podman", "compose", "-f", composeFile, "up", "-d", "--wait")
+      .apply { environment()["DOCKER_HOST"] = dockerHost }
+      .inheritIO().start().waitFor()
+    if (code != 0) throw GradleException("podman compose up failed (exit $code)")
+  }
+}
+
+tasks.register("dockerDown") {
+  group = "docker"
+  description = "Stop dev services"
+  doLast {
+    val dockerHost = podmanDockerHost(podmanMachine)
+    ProcessBuilder("podman", "compose", "-f", composeFile, "down")
+      .apply { environment()["DOCKER_HOST"] = dockerHost }
+      .inheritIO().start().waitFor()
+  }
+}
+
+tasks.named("dbMigrate") { dependsOn("dockerUp") }
+tasks.named("run") { dependsOn("dbMigrate") }
+tasks.named("test") { dependsOn("dbMigrate") }

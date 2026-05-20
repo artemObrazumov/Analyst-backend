@@ -1,4 +1,4 @@
-package com.artemobraz.com.artemobraz
+package com.artemobraz
 
 import io.ktor.server.netty.*
 

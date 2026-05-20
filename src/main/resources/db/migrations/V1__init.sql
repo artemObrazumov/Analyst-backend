@@ -1,4 +1,4 @@
--- TimescaleDB extension
+-- TimescaleDB extension (skipped silently if not installed)
 DO $$
 BEGIN
     BEGIN
@@ -19,7 +19,7 @@ CREATE TABLE IF NOT EXISTS users (
     updated_at    TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- Registered apps (each has an API key for the SDK)
+-- Registered apps (each has an API key for the mobile SDK)
 CREATE TABLE IF NOT EXISTS apps (
     id         UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
     name       TEXT        NOT NULL,
@@ -36,34 +36,40 @@ CREATE TABLE IF NOT EXISTS events (
     event_id    UUID        NOT NULL,
     occurred_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     received_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-
     app_id      UUID        NOT NULL REFERENCES apps(id),
     session_id  UUID,
     device_id   TEXT        NOT NULL,
     user_id     TEXT,
-
     event_type  TEXT        NOT NULL,
-
     platform    TEXT,
     app_version TEXT,
     os_version  TEXT,
     country     CHAR(2),
-
     properties  JSONB       NOT NULL DEFAULT '{}',
-
     PRIMARY KEY (id, occurred_at)
 );
 
--- Indexes
-CREATE UNIQUE INDEX IF NOT EXISTS events_event_id_idx    ON events(event_id);
-CREATE INDEX        IF NOT EXISTS events_app_type_time   ON events(app_id, event_type, occurred_at DESC);
-CREATE INDEX        IF NOT EXISTS events_properties_gin  ON events USING GIN (properties);
-
--- Convert to hypertable and add compression (only when TimescaleDB is present)
+-- Convert to hypertable BEFORE creating unique indexes (TimescaleDB requirement)
 DO $$
 BEGIN
     IF EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'timescaledb') THEN
         PERFORM create_hypertable('events', 'occurred_at', if_not_exists => true);
+    END IF;
+END $$;
+
+-- Unique index: must include occurred_at when table is a hypertable
+CREATE UNIQUE INDEX IF NOT EXISTS events_event_id_occurred_idx ON events(event_id, occurred_at);
+
+-- Regular indexes
+CREATE INDEX IF NOT EXISTS events_event_id_idx   ON events(event_id);
+CREATE INDEX IF NOT EXISTS events_app_type_time  ON events(app_id, event_type, occurred_at DESC);
+CREATE INDEX IF NOT EXISTS events_properties_gin ON events USING GIN (properties);
+
+-- Compression policy (only with TimescaleDB)
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'timescaledb') THEN
+        ALTER TABLE events SET (timescaledb.compress, timescaledb.compress_segmentby = 'app_id');
         PERFORM add_compression_policy('events', INTERVAL '7 days', if_not_exists => true);
     END IF;
 END $$;
