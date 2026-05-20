@@ -1,0 +1,25 @@
+ktor:
+  deployment:
+    port: 8080
+  application:
+    modules:
+      - com.artemobraz.ApplicationKt.module
+
+database:
+  url: "jdbc:postgresql://localhost:5432/analytics"
+  user: "analytics"
+  password: "secret"
+  pool:
+    maximumPoolSize: 10
+    minimumIdle: 2
+
+redis:
+  url: "redis://localhost:6379"
+
+jwt:
+  secret: "artemorazanalyticsproject"
+  issuer: "analytics-platform"
+  audience: "admin"
+  realm: "Analytics Admin"
+  accessTokenTtlMinutes: 15
+  refreshTokenTtlDays: 30

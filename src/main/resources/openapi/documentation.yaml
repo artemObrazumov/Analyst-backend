@@ -1,0 +1,79 @@
+openapi: "3.1.0"
+info:
+  title: Analytics Platform API
+  version: "1.0.0"
+  description: "Backend API for the Analytics Platform"
+servers:
+  - url: "http://localhost:8080"
+    description: "Local development"
+
+tags:
+  - name: system
+    description: "Health and metrics"
+  - name: auth
+    description: "Authentication"
+  - name: events
+    description: "Event ingestion"
+  - name: apps
+    description: "App management"
+  - name: analytics
+    description: "Analytics queries"
+
+paths:
+  /health:
+    get:
+      tags: [ system ]
+      summary: "Returns service health status"
+      operationId: getHealth
+      responses:
+        "200":
+          description: "Service is healthy"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+
+  /metrics:
+    get:
+      tags: [ system ]
+      summary: "Returns Prometheus metrics"
+      operationId: getMetrics
+      responses:
+        "200":
+          description: "Prometheus scrape output"
+          content:
+            text/plain:
+              schema:
+                type: string
+
+components:
+  schemas:
+    HealthResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          example: "ok"
+        version:
+          type: string
+          example: "1.0.0"
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+          example: "BAD_REQUEST"
+        message:
+          type: string
+          example: "Invalid input"
+
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+    apiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
