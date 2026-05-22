@@ -1,11 +1,15 @@
 import com.artemobraz.model.TokenResponse
+import com.artemobraz.model.UserResponse
 import io.ktor.client.request.*
 import io.ktor.client.statement.*
 import io.ktor.http.*
 import io.ktor.server.testing.*
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNotEquals
 import kotlin.test.assertTrue
 
 class AuthTest {
@@ -57,6 +61,26 @@ class AuthTest {
     assertEquals(HttpStatusCode.OK, response.status)
     val rotated = json.decodeFromString<TokenResponse>(response.bodyAsText())
     assertTrue(rotated.accessToken.isNotBlank())
-    assertTrue(rotated.refreshToken != original.refreshToken)
+    assertNotEquals(original.refreshToken, rotated.refreshToken)
+  }
+
+  @Test
+  fun `GET users me returns current user profile`() = testApplication {
+    configure()
+    val email = "me_${System.currentTimeMillis()}@test.com"
+    val registerResponse = client.post("/api/auth/register") {
+      contentType(ContentType.Application.Json)
+      setBody("""{"name":"Artem Obrazumov","email":"$email","password":"123456"}""")
+    }
+    val token = Json.parseToJsonElement(registerResponse.bodyAsText())
+      .jsonObject["accessToken"]!!.jsonPrimitive.content
+
+    val response = client.get("/api/users/me") {
+      bearerAuth(token)
+    }
+    assertEquals(HttpStatusCode.OK, response.status)
+    val user = json.decodeFromString<UserResponse>(response.bodyAsText())
+    assertEquals(email, user.email)
+    assertEquals("Artem Obrazumov", user.name)
   }
 }

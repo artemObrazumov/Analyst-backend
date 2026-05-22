@@ -8,10 +8,10 @@ fun Application.module() {
     configureCors()
     configureStatusPages()
     configureValidation()
-    configureAuth()
     configureMetrics()
     configureDatabase()
     configureRedis()
+    configureAuth()
     configureSwagger()
     configureRouting()
 }

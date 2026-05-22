@@ -2,6 +2,7 @@ package com.artemobraz.plugins
 
 import com.artemobraz.model.AuthenticationException
 import com.artemobraz.model.ConflictException
+import com.artemobraz.model.ForbiddenException
 import com.artemobraz.model.NotFoundException
 import io.ktor.http.*
 import io.ktor.server.application.*
@@ -32,6 +33,9 @@ fun Application.configureStatusPages() {
         }
         exception<NotFoundException> { call, cause ->
             call.respond(HttpStatusCode.NotFound, ErrorResponse("NOT_FOUND", cause.message ?: "Not found"))
+        }
+        exception<ForbiddenException> { call, cause ->
+            call.respond(HttpStatusCode.Forbidden, ErrorResponse("FORBIDDEN", cause.message ?: "Forbidden"))
         }
         exception<Throwable> { call, cause ->
             call.application.log.error("Unhandled exception", cause)

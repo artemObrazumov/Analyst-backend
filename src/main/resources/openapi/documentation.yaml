@@ -163,7 +163,7 @@ paths:
   /api/auth/logout:
     post:
       tags: [ auth ]
-      summary: "Invalidates a refresh token"
+      summary: "Invalidates a refresh token (no JWT required)"
       operationId: logout
       requestBody:
         required: true
@@ -174,6 +174,198 @@ paths:
       responses:
         "200":
           description: "Logged out successfully"
+
+  /api/users/me/logout:
+    post:
+      tags: [ auth ]
+      summary: "Revokes both access and refresh tokens, invalidating the session completely"
+      operationId: userLogout
+      security:
+        - bearerAuth: [ ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RefreshRequest"
+      responses:
+        "200":
+          description: "Session fully revoked"
+        "401":
+          description: "Missing or invalid access token"
+
+  /api/projects:
+    get:
+      tags: [ apps ]
+      summary: "Returns all projects owned by the current user"
+      operationId: listProjects
+      security:
+        - bearerAuth: [ ]
+      responses:
+        "200":
+          description: "List of projects"
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ProjectResponse"
+        "401":
+          description: "Unauthorized"
+
+    post:
+      tags: [ apps ]
+      summary: "Creates a new project and returns the API key exactly once"
+      operationId: createProject
+      security:
+        - bearerAuth: [ ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateProjectRequest"
+      responses:
+        "201":
+          description: "Project created — API key shown only here, store it securely"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectWithKeyResponse"
+        "401":
+          description: "Unauthorized"
+        "422":
+          description: "Validation error"
+
+  /api/projects/{id}:
+    get:
+      tags: [ apps ]
+      summary: "Returns a project by ID"
+      operationId: getProject
+      security:
+        - bearerAuth: [ ]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: "Project details"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectResponse"
+        "403":
+          description: "Access denied"
+        "404":
+          description: "Project not found"
+
+    put:
+      tags: [ apps ]
+      summary: "Updates project name or description"
+      operationId: updateProject
+      security:
+        - bearerAuth: [ ]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateProjectRequest"
+      responses:
+        "200":
+          description: "Updated project"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectResponse"
+        "403":
+          description: "Access denied"
+        "404":
+          description: "Project not found"
+
+    delete:
+      tags: [ apps ]
+      summary: "Deletes a project and all its data"
+      operationId: deleteProject
+      security:
+        - bearerAuth: [ ]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "204":
+          description: "Deleted"
+        "403":
+          description: "Access denied"
+        "404":
+          description: "Project not found"
+
+  /api/projects/{id}/key:
+    get:
+      tags: [ apps ]
+      summary: "Returns API key metadata (not the raw value — only visible on creation or rotation)"
+      operationId: getKeyMeta
+      security:
+        - bearerAuth: [ ]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: "API key metadata"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiKeyMetaResponse"
+        "403":
+          description: "Access denied"
+        "404":
+          description: "No active key"
+
+  /api/projects/{id}/key/rotate:
+    post:
+      tags: [ apps ]
+      summary: "Revokes the current API key and issues a new one, shown exactly once"
+      operationId: rotateKey
+      security:
+        - bearerAuth: [ ]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: "New API key — shown only here, store it securely"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiKeyCreatedResponse"
+        "403":
+          description: "Access denied"
+        "404":
+          description: "Project not found"
 
 components:
   schemas:
@@ -263,6 +455,83 @@ components:
         role:
           type: string
           example: "admin"
+
+    CreateProjectRequest:
+      type: object
+      required: [ name ]
+      properties:
+        name:
+          type: string
+          example: "My Mobile App"
+        description:
+          type: string
+          example: "Production analytics project"
+
+    UpdateProjectRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+
+    ProjectResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    ProjectWithKeyResponse:
+      type: object
+      properties:
+        project:
+          $ref: "#/components/schemas/ProjectResponse"
+        apiKey:
+          $ref: "#/components/schemas/ApiKeyCreatedResponse"
+
+    ApiKeyMetaResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        label:
+          type: string
+          nullable: true
+        isActive:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+
+    ApiKeyCreatedResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        key:
+          type: string
+          description: "Raw API key — shown only once, store it securely"
+          example: "proj_a3f8c2d1e4b7..."
+        label:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
 
   securitySchemes:
     bearerAuth:
