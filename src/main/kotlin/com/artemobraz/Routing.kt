@@ -4,7 +4,9 @@ import com.artemobraz.plugins.prometheusRegistry
 import com.artemobraz.plugins.redis
 import com.artemobraz.repository.UserRepository
 import com.artemobraz.routing.authRoutes
+import com.artemobraz.routing.userRoutes
 import com.artemobraz.service.AuthService
+import com.artemobraz.service.UserService
 import io.ktor.http.*
 import io.ktor.server.application.*
 import io.ktor.server.response.*
@@ -15,7 +17,9 @@ import kotlinx.serialization.Serializable
 data class HealthResponse(val status: String, val version: String = "1.0.0")
 
 fun Application.configureRouting() {
-    val authService = AuthService(environment.config, UserRepository(), redis)
+    val userRepository = UserRepository()
+    val authService = AuthService(environment.config, userRepository, redis)
+    val userService = UserService(userRepository)
 
     routing {
         get("/health") {
@@ -29,6 +33,7 @@ fun Application.configureRouting() {
         }
         route("/api") {
             authRoutes(authService)
+            userRoutes(userService)
         }
     }
 }
