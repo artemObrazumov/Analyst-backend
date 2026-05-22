@@ -15,7 +15,8 @@ class AuthService(
   private val userRepository: UserRepository,
   private val redis: StatefulRedisConnection<String, String>
 ) {
-  private val jwtSecret = config.property("jwt.secret").getString()
+  private val accessSecret = config.property("jwt.accessSecret").getString()
+  private val refreshSecret = config.property("jwt.refreshSecret").getString()
   private val jwtIssuer = config.property("jwt.issuer").getString()
   private val jwtAudience = config.property("jwt.audience").getString()
   private val accessTokenTtlMinutes = config.propertyOrNull("jwt.accessTokenTtlMinutes")?.getString()?.toLong() ?: 15L
@@ -41,34 +42,58 @@ class AuthService(
   }
 
   suspend fun refresh(refreshToken: String): TokenResponse {
+    val jti = verifyRefreshToken(refreshToken)
     val commands = redis.async()
-    val userId = commands.get("refresh:$refreshToken").await()
+    val userId = commands.get("refresh:$jti").await()
       ?: throw AuthenticationException("Invalid or expired refresh token")
+    commands.del("refresh:$jti").await()
     val user = userRepository.findById(UUID.fromString(userId))
       ?: throw NotFoundException("User not found")
-    commands.del("refresh:$refreshToken").await()
     return generateTokenPair(user)
   }
 
   suspend fun logout(refreshToken: String) {
-    redis.async().del("refresh:$refreshToken").await()
+    val jti = verifyRefreshToken(refreshToken)
+    redis.async().del("refresh:$jti").await()
+  }
+
+  private fun verifyRefreshToken(token: String): String {
+    return try {
+      val decoded = JWT.require(Algorithm.HMAC256(refreshSecret))
+        .withIssuer(jwtIssuer)
+        .build()
+        .verify(token)
+      decoded.id ?: throw AuthenticationException("Invalid refresh token")
+    } catch (e: Exception) {
+      throw AuthenticationException("Invalid or expired refresh token")
+    }
   }
 
   private suspend fun generateTokenPair(user: UserRow): TokenResponse {
-    val expiresAt = Date(System.currentTimeMillis() + accessTokenTtlSeconds * 1000)
+    val now = System.currentTimeMillis()
+    val accessExpiresAt = Date(now + accessTokenTtlSeconds * 1000)
+    val refreshExpiresAt = Date(now + refreshTokenTtlDays * 24 * 3600 * 1000)
+    val jti = UUID.randomUUID().toString()
+
     val accessToken = JWT.create()
       .withAudience(jwtAudience)
       .withIssuer(jwtIssuer)
       .withClaim("userId", user.id.toString())
       .withClaim("email", user.email)
       .withClaim("role", user.role)
-      .withExpiresAt(expiresAt)
-      .sign(Algorithm.HMAC256(jwtSecret))
+      .withExpiresAt(accessExpiresAt)
+      .sign(Algorithm.HMAC256(accessSecret))
 
-    val refreshToken = UUID.randomUUID().toString()
+    val refreshToken = JWT.create()
+      .withIssuer(jwtIssuer)
+      .withSubject(user.id.toString())
+      .withJWTId(jti)
+      .withExpiresAt(refreshExpiresAt)
+      .sign(Algorithm.HMAC256(refreshSecret))
+
     val commands = redis.async()
-    commands.set("refresh:$refreshToken", user.id.toString()).await()
-    commands.expire("refresh:$refreshToken", refreshTokenTtlDays * 24 * 3600).await()
+    commands.set("refresh:$jti", user.id.toString()).await()
+    commands.expire("refresh:$jti", refreshTokenTtlDays * 24 * 3600).await()
 
     return TokenResponse(
       accessToken = accessToken,

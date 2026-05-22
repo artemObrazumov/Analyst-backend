@@ -87,8 +87,19 @@ tasks.register<JavaExec>("dbMigrate") {
 val podmanMachine = project.findProperty("podmanMachine") as? String ?: "default"
 val composeFile = "${rootProject.projectDir.parent}/docker-compose.yml"
 
+fun findPodman(): String {
+  val fromEnv = System.getenv("PODMAN_PATH")
+  if (!fromEnv.isNullOrBlank()) return fromEnv
+  val searchPaths = (System.getenv("PATH") ?: "").split(File.pathSeparator) +
+    listOf("/opt/homebrew/bin", "/usr/local/bin", "/usr/bin")
+  return searchPaths.map { File(it, "podman") }.firstOrNull { it.canExecute() }?.absolutePath
+    ?: throw GradleException("podman not found. Set PODMAN_PATH env variable or add podman to PATH.")
+}
+
+val podmanBin: String by lazy { findPodman() }
+
 fun podmanQuery(machine: String, format: String): String {
-  val proc = ProcessBuilder("podman", "machine", "inspect", machine, "--format", format).start()
+  val proc = ProcessBuilder(podmanBin, "machine", "inspect", machine, "--format", format).start()
   val output = proc.inputStream.bufferedReader().readText().trim()
   proc.waitFor()
   return output
@@ -106,14 +117,14 @@ tasks.register("dockerUp") {
     val state = podmanQuery(podmanMachine, "{{.State}}")
     if (state != "running") {
       println("Podman machine '$podmanMachine' is '$state' — starting...")
-      val code = ProcessBuilder("podman", "machine", "start", podmanMachine)
+      val code = ProcessBuilder(podmanBin, "machine", "start", podmanMachine)
         .inheritIO().start().waitFor()
       // 125 = already running (race condition), treat as success
       if (code != 0 && code != 125) throw GradleException("podman machine start failed (exit $code)")
     }
 
     val dockerHost = podmanDockerHost(podmanMachine)
-    val code = ProcessBuilder("podman", "compose", "-f", composeFile, "up", "-d", "--wait")
+    val code = ProcessBuilder(podmanBin, "compose", "-f", composeFile, "up", "-d", "--wait")
       .apply { environment()["DOCKER_HOST"] = dockerHost }
       .inheritIO().start().waitFor()
     if (code != 0) throw GradleException("podman compose up failed (exit $code)")
@@ -125,7 +136,7 @@ tasks.register("dockerDown") {
   description = "Stop dev services"
   doLast {
     val dockerHost = podmanDockerHost(podmanMachine)
-    ProcessBuilder("podman", "compose", "-f", composeFile, "down")
+    ProcessBuilder(podmanBin, "compose", "-f", composeFile, "down")
       .apply { environment()["DOCKER_HOST"] = dockerHost }
       .inheritIO().start().waitFor()
   }

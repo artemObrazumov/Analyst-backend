@@ -17,7 +17,8 @@ redis:
   url: "redis://localhost:6379"
 
 jwt:
-  secret: "artemorazanalyticsproject"
+  accessSecret: "verySecretAccessToken"
+  refreshSecret: "verySecretRefreshToken"
   issuer: "analytics-platform"
   audience: "admin"
   realm: "Analytics Admin"

@@ -201,20 +201,26 @@ components:
       properties:
         refreshToken:
           type: string
-          example: "550e8400-e29b-41d4-a716-446655440000"
+          description: "JWT refresh token received from /login or /register"
+          example: "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ1c2VyLWlkIiwianRpIjoianRpLWlkIn0.sig"
 
     TokenResponse:
       type: object
       properties:
         accessToken:
           type: string
+          description: "Short-lived JWT for API access, signed with accessSecret"
+          example: "eyJhbGciOiJIUzI1NiJ9.eyJ1c2VySWQiOiIuLi4ifQ.sig"
         refreshToken:
           type: string
+          description: "Long-lived JWT for obtaining a new token pair, signed with refreshSecret"
+          example: "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIuLi4iLCJqdGkiOiIuLi4ifQ.sig"
         tokenType:
           type: string
           example: "Bearer"
         expiresIn:
           type: integer
+          description: "Access token lifetime in seconds"
           example: 900
 
   securitySchemes:

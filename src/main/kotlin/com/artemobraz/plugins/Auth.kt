@@ -8,7 +8,7 @@ import io.ktor.server.auth.jwt.*
 
 fun Application.configureAuth() {
   val config = environment.config
-  val secret = config.property("jwt.secret").getString()
+  val accessSecret = config.property("jwt.accessSecret").getString()
   val issuer = config.property("jwt.issuer").getString()
   val audience = config.property("jwt.audience").getString()
   val realm = config.property("jwt.realm").getString()
@@ -17,7 +17,7 @@ fun Application.configureAuth() {
     jwt("admin-jwt") {
       this.realm = realm
       verifier(
-        JWT.require(Algorithm.HMAC256(secret))
+        JWT.require(Algorithm.HMAC256(accessSecret))
           .withAudience(audience)
           .withIssuer(issuer)
           .build()
