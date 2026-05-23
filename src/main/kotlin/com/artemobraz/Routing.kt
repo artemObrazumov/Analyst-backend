@@ -3,16 +3,11 @@ package com.artemobraz
 import com.artemobraz.plugins.prometheusRegistry
 import com.artemobraz.plugins.redis
 import com.artemobraz.repository.EventRepository
+import com.artemobraz.repository.ExperimentRepository
 import com.artemobraz.repository.ProjectRepository
 import com.artemobraz.repository.UserRepository
-import com.artemobraz.routing.authRoutes
-import com.artemobraz.routing.eventRoutes
-import com.artemobraz.routing.projectRoutes
-import com.artemobraz.routing.userRoutes
-import com.artemobraz.service.AuthService
-import com.artemobraz.service.EventQueryService
-import com.artemobraz.service.ProjectService
-import com.artemobraz.service.UserService
+import com.artemobraz.routing.*
+import com.artemobraz.service.*
 import io.ktor.http.*
 import io.ktor.server.application.*
 import io.ktor.server.response.*
@@ -26,10 +21,12 @@ fun Application.configureRouting() {
     val userRepository = UserRepository()
     val projectRepository = ProjectRepository()
     val eventRepository = EventRepository()
+    val experimentRepository = ExperimentRepository()
     val authService = AuthService(environment.config, userRepository, redis)
     val userService = UserService(userRepository)
     val projectService = ProjectService(projectRepository)
     val eventQueryService = EventQueryService(eventRepository, projectRepository)
+    val experimentService = ExperimentService(experimentRepository, projectRepository)
     monitor.subscribe(ApplicationStopped) { eventQueryService.shutdown() }
 
     routing {
@@ -47,6 +44,7 @@ fun Application.configureRouting() {
             userRoutes(userService, authService)
             projectRoutes(projectService)
             eventRoutes(eventQueryService)
+            experimentRoutes(experimentService)
         }
     }
 }
