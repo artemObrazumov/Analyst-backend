@@ -41,8 +41,13 @@ class EventService(
     return row.toDto()
   }
 
-  suspend fun list(projectId: UUID, limit: Int = 100): List<EventDto> =
-    eventRepository.findByProject(projectId, limit.coerceIn(1, 1000)).map { it.toDto() }
+  suspend fun list(
+    projectId: UUID,
+    limit: Int = 100,
+    from: Instant? = null,
+    to: Instant? = null
+  ): List<EventDto> =
+    eventRepository.findByProject(projectId, limit.coerceIn(1, 1000), from, to).map { it.toDto() }
 
   private fun com.artemobraz.model.EventRow.toDto() = EventDto(
     id = id.toString(),

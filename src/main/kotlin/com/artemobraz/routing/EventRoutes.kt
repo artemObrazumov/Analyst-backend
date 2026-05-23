@@ -7,6 +7,7 @@ import io.ktor.server.auth.*
 import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
+import kotlinx.datetime.Instant
 import java.util.*
 
 fun Route.eventRoutes(eventService: EventService) {
@@ -31,7 +32,9 @@ fun Route.eventRoutes(eventService: EventService) {
             )
         )
         val limit = call.request.queryParameters["limit"]?.toIntOrNull() ?: 100
-        call.respond(eventService.list(projectId, limit))
+        val from = call.request.queryParameters["from"]?.let { Instant.parse(it) }
+        val to = call.request.queryParameters["to"]?.let { Instant.parse(it) }
+        call.respond(eventService.list(projectId, limit, from, to))
       }
     }
   }
