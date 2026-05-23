@@ -63,6 +63,13 @@ class ProjectRepository {
     ApiKeys.selectAll().where { ApiKeys.id eq insertedId }.first().toApiKeyRow()
   }
 
+  suspend fun findProjectIdByKeyHash(keyHash: String): UUID? = newSuspendedTransaction {
+    ApiKeys.selectAll()
+      .where { (ApiKeys.keyHash eq keyHash) and (ApiKeys.isActive eq true) }
+      .firstOrNull()
+      ?.let { it[ApiKeys.projectId].value }
+  }
+
   suspend fun revokeActiveKey(projectId: UUID) = newSuspendedTransaction {
     ApiKeys.update({ (ApiKeys.projectId eq projectId) and (ApiKeys.isActive eq true) }) {
       it[isActive] = false

@@ -2,12 +2,15 @@ package com.artemobraz
 
 import com.artemobraz.plugins.prometheusRegistry
 import com.artemobraz.plugins.redis
+import com.artemobraz.repository.EventRepository
 import com.artemobraz.repository.ProjectRepository
 import com.artemobraz.repository.UserRepository
 import com.artemobraz.routing.authRoutes
+import com.artemobraz.routing.eventRoutes
 import com.artemobraz.routing.projectRoutes
 import com.artemobraz.routing.userRoutes
 import com.artemobraz.service.AuthService
+import com.artemobraz.service.EventService
 import com.artemobraz.service.ProjectService
 import com.artemobraz.service.UserService
 import io.ktor.http.*
@@ -22,9 +25,11 @@ data class HealthResponse(val status: String, val version: String = "1.0.0")
 fun Application.configureRouting() {
     val userRepository = UserRepository()
     val projectRepository = ProjectRepository()
+    val eventRepository = EventRepository()
     val authService = AuthService(environment.config, userRepository, redis)
     val userService = UserService(userRepository)
     val projectService = ProjectService(projectRepository)
+    val eventService = EventService(eventRepository, projectRepository)
 
     routing {
         get("/health") {
@@ -40,6 +45,7 @@ fun Application.configureRouting() {
             authRoutes(authService)
             userRoutes(userService, authService)
             projectRoutes(projectService)
+            eventRoutes(eventService)
         }
     }
 }

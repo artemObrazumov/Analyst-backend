@@ -2,7 +2,7 @@ package com.artemobraz.service
 
 import com.artemobraz.model.*
 import com.artemobraz.repository.ProjectRepository
-import java.security.MessageDigest
+import com.artemobraz.utils.sha256
 import java.util.*
 
 class ProjectService(private val projectRepository: ProjectRepository) {
@@ -74,11 +74,6 @@ class ProjectService(private val projectRepository: ProjectRepository) {
   private fun generateKey(): String {
     val bytes = ByteArray(24).also { java.security.SecureRandom().nextBytes(it) }
     return "proj_" + bytes.joinToString("") { "%02x".format(it) }
-  }
-
-  private fun sha256(input: String): String {
-    val bytes = MessageDigest.getInstance("SHA-256").digest(input.toByteArray(Charsets.UTF_8))
-    return bytes.joinToString("") { "%02x".format(it) }
   }
 
   private fun ProjectRow.toResponse() = ProjectResponse(
