@@ -2,32 +2,61 @@ package com.artemobraz.service
 
 import com.artemobraz.model.AuthenticationException
 import com.artemobraz.model.EventDto
+import com.artemobraz.model.EventRow
 import com.artemobraz.model.IngestEventRequest
 import com.artemobraz.repository.EventRepository
 import com.artemobraz.repository.ProjectRepository
 import com.artemobraz.utils.sha256
+import kotlinx.coroutines.*
+import kotlinx.coroutines.channels.Channel
 import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import java.util.*
 
-class EventService(
+class EventQueryService(
   private val eventRepository: EventRepository,
   private val projectRepository: ProjectRepository
 ) {
-  suspend fun ingest(apiKey: String, request: IngestEventRequest): EventDto {
+  private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+  private val channel = Channel<PendingEvent>(capacity = 10_000)
+
+  init {
+    scope.launch {
+      for (pending in channel) {
+        runCatching {
+          eventRepository.create(
+            projectId = pending.projectId,
+            eventType = pending.eventType,
+            occurredAt = pending.occurredAt,
+            sessionId = pending.sessionId,
+            deviceId = pending.deviceId,
+            userId = pending.userId,
+            platform = pending.platform,
+            appVersion = pending.appVersion,
+            osVersion = pending.osVersion,
+            country = pending.country,
+            properties = pending.properties
+          )
+        }
+      }
+    }
+  }
+
+  fun shutdown() {
+    channel.close()
+    scope.cancel()
+  }
+
+  suspend fun ingest(apiKey: String, request: IngestEventRequest): Boolean {
     val projectId = projectRepository.findProjectIdByKeyHash(sha256(apiKey))
       ?: throw AuthenticationException("Invalid API key")
 
-    val occurredAt = request.occurredAt
-      ?.let { Instant.parse(it) }
-      ?: Clock.System.now()
-
-    val row = eventRepository.create(
+    val pending = PendingEvent(
       projectId = projectId,
       eventType = request.eventType,
-      occurredAt = occurredAt,
+      occurredAt = request.occurredAt?.let { Instant.parse(it) } ?: Clock.System.now(),
       sessionId = request.sessionId?.let { UUID.fromString(it) },
       deviceId = request.deviceId,
       userId = request.userId,
@@ -38,7 +67,7 @@ class EventService(
       properties = Json.encodeToString(JsonObject.serializer(), request.properties)
     )
 
-    return row.toDto()
+    return channel.trySend(pending).isSuccess
   }
 
   suspend fun list(
@@ -49,7 +78,21 @@ class EventService(
   ): List<EventDto> =
     eventRepository.findByProject(projectId, limit.coerceIn(1, 1000), from, to).map { it.toDto() }
 
-  private fun com.artemobraz.model.EventRow.toDto() = EventDto(
+  private data class PendingEvent(
+    val projectId: UUID,
+    val eventType: String,
+    val occurredAt: Instant,
+    val sessionId: UUID?,
+    val deviceId: String?,
+    val userId: String?,
+    val platform: String?,
+    val appVersion: String?,
+    val osVersion: String?,
+    val country: String?,
+    val properties: String
+  )
+
+  private fun EventRow.toDto() = EventDto(
     id = id.toString(),
     projectId = projectId.toString(),
     eventType = eventType,

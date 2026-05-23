@@ -10,7 +10,7 @@ import com.artemobraz.routing.eventRoutes
 import com.artemobraz.routing.projectRoutes
 import com.artemobraz.routing.userRoutes
 import com.artemobraz.service.AuthService
-import com.artemobraz.service.EventService
+import com.artemobraz.service.EventQueryService
 import com.artemobraz.service.ProjectService
 import com.artemobraz.service.UserService
 import io.ktor.http.*
@@ -29,7 +29,8 @@ fun Application.configureRouting() {
     val authService = AuthService(environment.config, userRepository, redis)
     val userService = UserService(userRepository)
     val projectService = ProjectService(projectRepository)
-    val eventService = EventService(eventRepository, projectRepository)
+    val eventQueryService = EventQueryService(eventRepository, projectRepository)
+    monitor.subscribe(ApplicationStopped) { eventQueryService.shutdown() }
 
     routing {
         get("/health") {
@@ -45,7 +46,7 @@ fun Application.configureRouting() {
             authRoutes(authService)
             userRoutes(userService, authService)
             projectRoutes(projectService)
-            eventRoutes(eventService)
+            eventRoutes(eventQueryService)
         }
     }
 }

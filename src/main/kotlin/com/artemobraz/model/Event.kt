@@ -1,5 +1,6 @@
 package com.artemobraz.model
 
+import com.artemobraz.utils.jsonb
 import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
 import org.jetbrains.exposed.sql.Table
@@ -19,7 +20,7 @@ object Events : Table("events") {
     val appVersion = text("app_version").nullable()
     val osVersion = text("os_version").nullable()
     val country = char("country", 2).nullable()
-    val properties = text("properties").default("{}")
+    val properties = jsonb("properties").default("{}")
 
     override val primaryKey = PrimaryKey(id, occurredAt)
 }
