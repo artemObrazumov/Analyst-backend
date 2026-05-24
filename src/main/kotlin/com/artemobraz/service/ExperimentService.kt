@@ -101,6 +101,33 @@ class ExperimentService(
     return experimentRepository.addExperimentEvent(experimentId, eventType, note).toEventResponse()
   }
 
+  suspend fun analyzeExperiment(userId: UUID, projectId: UUID, id: UUID): ExperimentAnalysisResponse {
+    assertProjectAccess(userId, projectId)
+    val experiment = assertExperimentBelongsToProject(id, projectId)
+    val groups = experimentRepository.findGroups(id)
+    val eventTypes = experimentRepository.findExperimentEvents(id).map { it.eventType }
+    val groupResults = groups.map { group ->
+      val (exposed, converted) = experimentRepository.analyzeGroup(
+        projectId, eventTypes, group.propertyKey, group.propertyValue
+      )
+      GroupAnalysisResponse(
+        label = group.label,
+        propertyKey = group.propertyKey,
+        propertyValue = group.propertyValue,
+        exposed = exposed,
+        converted = converted,
+        conversionRate = if (exposed == 0L) 0.0
+        else Math.round(converted.toDouble() / exposed * 100 * 100).toDouble() / 100
+      )
+    }
+    return ExperimentAnalysisResponse(
+      experimentId = experiment.id.toString(),
+      experimentName = experiment.name,
+      trackedEvents = eventTypes,
+      groups = groupResults
+    )
+  }
+
   suspend fun removeEvent(userId: UUID, projectId: UUID, experimentId: UUID, eventId: UUID) {
     assertProjectAccess(userId, projectId)
     assertExperimentBelongsToProject(experimentId, projectId)

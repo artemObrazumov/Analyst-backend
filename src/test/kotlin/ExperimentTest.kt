@@ -1,9 +1,11 @@
+import com.artemobraz.model.ExperimentAnalysisResponse
 import com.artemobraz.model.ExperimentDetailResponse
 import com.artemobraz.model.ExperimentResponse
 import io.ktor.client.request.*
 import io.ktor.client.statement.*
 import io.ktor.http.*
 import io.ktor.server.testing.*
+import kotlinx.coroutines.delay
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
@@ -47,6 +49,29 @@ class ExperimentTest {
       setBody("""{"name":"$name"}""")
     }
     return Json.parseToJsonElement(res.bodyAsText()).jsonObject["id"]!!.jsonPrimitive.content
+  }
+
+  private suspend fun ApplicationTestBuilder.waitForAnalysisExposed(
+    token: String,
+    projectId: String,
+    experimentId: String,
+    expectedExposed: Long,
+    timeoutMs: Long = 10_000,
+  ) {
+    val deadline = System.currentTimeMillis() + timeoutMs
+    while (System.currentTimeMillis() < deadline) {
+      val response = client.get("/api/projects/$projectId/experiments/$experimentId/analysis") {
+        bearerAuth(token)
+      }
+      val body = json.decodeFromString<ExperimentAnalysisResponse>(response.bodyAsText())
+      if (body.groups[0].exposed == expectedExposed) return
+      delay(50)
+    }
+    val response = client.get("/api/projects/$projectId/experiments/$experimentId/analysis") {
+      bearerAuth(token)
+    }
+    val body = json.decodeFromString<ExperimentAnalysisResponse>(response.bodyAsText())
+    assertEquals(expectedExposed, body.groups[0].exposed, "async event ingest did not finish in time")
   }
 
   @Test
@@ -247,6 +272,131 @@ class ExperimentTest {
   }
 
   @Test
+  fun `analysis returns zero counts when no events ingested`() = testApplication {
+    configure()
+    val (token, projectId) = registerWithProject()
+    val experimentId = createExperiment(token, projectId)
+
+    client.post("/api/projects/$projectId/experiments/$experimentId/groups") {
+      contentType(ContentType.Application.Json)
+      bearerAuth(token)
+      setBody("""{"propertyKey":"color","propertyValue":"red","label":"Red"}""")
+    }
+    client.post("/api/projects/$projectId/experiments/$experimentId/events") {
+      contentType(ContentType.Application.Json)
+      bearerAuth(token)
+      setBody("""{"eventType":"Button.Shown"}""")
+    }
+    client.post("/api/projects/$projectId/experiments/$experimentId/events") {
+      contentType(ContentType.Application.Json)
+      bearerAuth(token)
+      setBody("""{"eventType":"Button.Clicked"}""")
+    }
+
+    val response = client.get("/api/projects/$projectId/experiments/$experimentId/analysis") {
+      bearerAuth(token)
+    }
+    assertEquals(HttpStatusCode.OK, response.status)
+    val body = json.decodeFromString<ExperimentAnalysisResponse>(response.bodyAsText())
+    assertEquals(experimentId, body.experimentId)
+    assertEquals(listOf("Button.Shown", "Button.Clicked"), body.trackedEvents)
+    assertEquals(1, body.groups.size)
+    assertEquals("Red", body.groups[0].label)
+    assertEquals(0L, body.groups[0].exposed)
+    assertEquals(0L, body.groups[0].converted)
+    assertEquals(0.0, body.groups[0].conversionRate)
+  }
+
+  @Test
+  fun `analysis counts exposed and converted users correctly`() = testApplication {
+    configure()
+    val (token, projectId) = registerWithProject()
+    val experimentId = createExperiment(token, projectId)
+
+    client.post("/api/projects/$projectId/experiments/$experimentId/groups") {
+      contentType(ContentType.Application.Json)
+      bearerAuth(token)
+      setBody("""{"propertyKey":"color","propertyValue":"red","label":"Red"}""")
+    }
+    client.post("/api/projects/$projectId/experiments/$experimentId/events") {
+      contentType(ContentType.Application.Json)
+      bearerAuth(token)
+      setBody("""{"eventType":"Button.Shown"}""")
+    }
+    client.post("/api/projects/$projectId/experiments/$experimentId/events") {
+      contentType(ContentType.Application.Json)
+      bearerAuth(token)
+      setBody("""{"eventType":"Button.Clicked"}""")
+    }
+
+    val projectsBody = Json.parseToJsonElement(
+      client.get("/api/projects") { bearerAuth(token) }.bodyAsText()
+    ).jsonArray
+    val apiKey = run {
+      val pid = projectsBody.first().jsonObject["id"]!!.jsonPrimitive.content
+      Json.parseToJsonElement(
+        client.post("/api/projects/$pid/key/rotate") { bearerAuth(token) }.bodyAsText()
+      ).jsonObject["key"]!!.jsonPrimitive.content
+    }
+
+    repeat(3) { i ->
+      client.post("/api/events/ingest") {
+        header("X-API-Key", apiKey)
+        contentType(ContentType.Application.Json)
+        setBody("""{"eventType":"Button.Shown","userId":"user$i","properties":{"color":"red"}}""")
+      }
+    }
+    repeat(2) { i ->
+      client.post("/api/events/ingest") {
+        header("X-API-Key", apiKey)
+        contentType(ContentType.Application.Json)
+        setBody("""{"eventType":"Button.Clicked","userId":"user$i"}""")
+      }
+    }
+
+    waitForAnalysisExposed(token, projectId, experimentId, expectedExposed = 3L)
+
+    val response = client.get("/api/projects/$projectId/experiments/$experimentId/analysis") {
+      bearerAuth(token)
+    }
+    assertEquals(HttpStatusCode.OK, response.status)
+    val body = json.decodeFromString<ExperimentAnalysisResponse>(response.bodyAsText())
+    assertEquals(3L, body.groups[0].exposed)
+    assertEquals(2L, body.groups[0].converted)
+    assertEquals(66.67, body.groups[0].conversionRate)
+  }
+
+  @Test
+  fun `analysis with two groups shows separate metrics`() = testApplication {
+    configure()
+    val (token, projectId) = registerWithProject()
+    val experimentId = createExperiment(token, projectId, "Color A/B Test")
+
+    listOf("red" to "Red", "yellow" to "Yellow").forEach { (value, label) ->
+      client.post("/api/projects/$projectId/experiments/$experimentId/groups") {
+        contentType(ContentType.Application.Json)
+        bearerAuth(token)
+        setBody("""{"propertyKey":"color","propertyValue":"$value","label":"$label"}""")
+      }
+    }
+    client.post("/api/projects/$projectId/experiments/$experimentId/events") {
+      contentType(ContentType.Application.Json)
+      bearerAuth(token)
+      setBody("""{"eventType":"Button.Shown"}""")
+    }
+
+    val response = client.get("/api/projects/$projectId/experiments/$experimentId/analysis") {
+      bearerAuth(token)
+    }
+    assertEquals(HttpStatusCode.OK, response.status)
+    val body = json.decodeFromString<ExperimentAnalysisResponse>(response.bodyAsText())
+    assertEquals("Color A/B Test", body.experimentName)
+    assertEquals(2, body.groups.size)
+    assertTrue(body.groups.any { it.label == "Red" && it.propertyValue == "red" })
+    assertTrue(body.groups.any { it.label == "Yellow" && it.propertyValue == "yellow" })
+  }
+
+  @Test
   fun `add group returns full group data`() = testApplication {
     configure()
     val (token, projectId) = registerWithProject()
@@ -288,12 +438,8 @@ class ExperimentTest {
   @Test
   fun `non-owner cannot add group to experiment`() = testApplication {
     configure()
-    val (_, projectId) = registerWithProject()
-
-    val ownerExperimentId = run {
-      val (ownerToken, _) = registerWithProject()
-      createExperiment(ownerToken, projectId)
-    }
+    val (ownerToken, projectId) = registerWithProject()
+    val ownerExperimentId = createExperiment(ownerToken, projectId)
 
     val strangerEmail = "stranger_${System.currentTimeMillis()}@test.com"
     val strangerToken = Json.parseToJsonElement(

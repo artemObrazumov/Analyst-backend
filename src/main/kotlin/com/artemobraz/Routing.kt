@@ -27,7 +27,7 @@ fun Application.configureRouting() {
     val projectService = ProjectService(projectRepository)
     val eventQueryService = EventQueryService(eventRepository, projectRepository)
     val experimentService = ExperimentService(experimentRepository, projectRepository)
-    monitor.subscribe(ApplicationStopped) { eventQueryService.shutdown() }
+    monitor.subscribe(ApplicationStopping) { eventQueryService.shutdown() }
 
     routing {
         get("/health") {

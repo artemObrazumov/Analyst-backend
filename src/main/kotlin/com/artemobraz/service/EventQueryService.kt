@@ -21,9 +21,10 @@ class EventQueryService(
 ) {
   private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
   private val channel = Channel<PendingEvent>(capacity = 10_000)
+  private val consumerJob: Job
 
   init {
-    scope.launch {
+    consumerJob = scope.launch {
       for (pending in channel) {
         runCatching {
           eventRepository.create(
@@ -45,7 +46,9 @@ class EventQueryService(
   }
 
   fun shutdown() {
+    if (channel.isClosedForSend) return
     channel.close()
+    runBlocking { consumerJob.join() }
     scope.cancel()
   }
 

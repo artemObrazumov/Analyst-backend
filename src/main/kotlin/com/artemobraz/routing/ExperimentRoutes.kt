@@ -62,6 +62,13 @@ fun Route.experimentRoutes(experimentService: ExperimentService) {
           call.respond(HttpStatusCode.NoContent)
         }
 
+        get("/analysis") {
+          val userId = call.userId()
+          val projectId = call.pathUUID("projectId")
+          val id = call.pathUUID("id")
+          call.respond(experimentService.analyzeExperiment(userId, projectId, id))
+        }
+
         put("/status") {
           val userId = call.userId()
           val projectId = call.pathUUID("projectId")

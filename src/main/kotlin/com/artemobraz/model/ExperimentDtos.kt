@@ -73,3 +73,21 @@ data class AddExperimentEventRequest(
   val eventType: String,
   val note: String? = null
 )
+
+@Serializable
+data class ExperimentAnalysisResponse(
+  val experimentId: String,
+  val experimentName: String,
+  val trackedEvents: List<String>,
+  val groups: List<GroupAnalysisResponse>
+)
+
+@Serializable
+data class GroupAnalysisResponse(
+  val label: String,
+  val propertyKey: String,
+  val propertyValue: String,
+  val exposed: Long,
+  val converted: Long,
+  val conversionRate: Double
+)

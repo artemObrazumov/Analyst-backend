@@ -4,8 +4,31 @@ import com.artemobraz.model.*
 import kotlinx.datetime.Clock
 import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
+import org.jetbrains.exposed.sql.statements.StatementType
 import org.jetbrains.exposed.sql.transactions.experimental.newSuspendedTransaction
 import java.util.*
+
+private val ANALYSIS_SQL = """
+    WITH exposed_users AS (
+        SELECT DISTINCT user_id
+        FROM events
+        WHERE project_id = CAST(? AS uuid)
+          AND user_id IS NOT NULL
+          AND event_type = ANY(CAST(? AS text[]))
+          AND properties @> CAST(? AS jsonb)
+    ),
+    user_event_counts AS (
+        SELECT eu.user_id, COUNT(DISTINCT e.event_type) AS event_count
+        FROM exposed_users eu
+        JOIN events e ON e.user_id = eu.user_id
+                     AND e.project_id = CAST(? AS uuid)
+                     AND e.event_type = ANY(CAST(? AS text[]))
+        GROUP BY eu.user_id
+    )
+    SELECT
+        (SELECT COUNT(*) FROM exposed_users) AS exposed,
+        (SELECT COUNT(*) FROM user_event_counts WHERE event_count = ?) AS converted
+""".trimIndent()
 
 class ExperimentRepository {
 
@@ -114,6 +137,36 @@ class ExperimentRepository {
 
   suspend fun deleteExperimentEvent(id: UUID) = newSuspendedTransaction {
     ExperimentEvents.deleteWhere { ExperimentEvents.id eq id }
+  }
+
+  suspend fun analyzeGroup(
+    projectId: UUID,
+    eventTypes: List<String>,
+    groupPropertyKey: String,
+    groupPropertyValue: String
+  ): Pair<Long, Long> {
+    if (eventTypes.isEmpty()) return Pair(0L, 0L)
+    val pgArray = eventTypes.distinct()
+      .joinToString(",", "{", "}") { "\"${it.replace("\\", "\\\\").replace("\"", "\\\"")}\"" }
+    val groupFilter = """{"$groupPropertyKey":"$groupPropertyValue"}"""
+    val distinctCount = eventTypes.distinct().size
+    return newSuspendedTransaction {
+      exec(
+        ANALYSIS_SQL,
+        listOf(
+          TextColumnType() to projectId.toString(),
+          TextColumnType() to pgArray,
+          TextColumnType() to groupFilter,
+          TextColumnType() to projectId.toString(),
+          TextColumnType() to pgArray,
+          IntegerColumnType() to distinctCount
+        ),
+        explicitStatementType = StatementType.SELECT
+      ) { rs ->
+        if (rs.next()) Pair(rs.getLong("exposed"), rs.getLong("converted"))
+        else Pair(0L, 0L)
+      } ?: Pair(0L, 0L)
+    }
   }
 
   private fun ResultRow.toExperimentRow() = ExperimentRow(
