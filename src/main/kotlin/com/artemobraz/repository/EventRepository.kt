@@ -5,8 +5,23 @@ import com.artemobraz.model.Events
 import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
 import org.jetbrains.exposed.sql.*
+import org.jetbrains.exposed.sql.statements.StatementType
 import org.jetbrains.exposed.sql.transactions.experimental.newSuspendedTransaction
 import java.util.*
+
+data class UserEventFirstOccurrence(
+  val userId: String,
+  val eventType: String,
+  val firstOccurredAt: Instant
+)
+
+private const val FIRST_OCCURRENCES_SQL = """
+    SELECT user_id, event_type, MIN(occurred_at) AS first_at
+    FROM events
+    WHERE project_id = CAST(? AS uuid)
+      AND user_id IS NOT NULL
+      AND event_type = ANY(CAST(? AS text[]))
+"""
 
 class EventRepository {
 
@@ -56,6 +71,50 @@ class EventRepository {
             properties = properties
         )
     }
+
+  suspend fun findFirstOccurrencesByUserAndType(
+    projectId: UUID,
+    eventTypes: List<String>,
+    from: Instant? = null,
+    to: Instant? = null
+  ): List<UserEventFirstOccurrence> {
+    if (eventTypes.isEmpty()) return emptyList()
+    val pgArray = eventTypes.distinct()
+      .joinToString(",", "{", "}") { "\"${it.replace("\\", "\\\\").replace("\"", "\\\"")}\"" }
+    val sql = buildString {
+      append(FIRST_OCCURRENCES_SQL.trim())
+      if (from != null) append("\n      AND occurred_at >= CAST(? AS timestamptz)")
+      if (to != null) append("\n      AND occurred_at <= CAST(? AS timestamptz)")
+      append("\n    GROUP BY user_id, event_type")
+    }
+    val params = buildList {
+      add(TextColumnType() to projectId.toString())
+      add(TextColumnType() to pgArray)
+      if (from != null) add(TextColumnType() to from.toString())
+      if (to != null) add(TextColumnType() to to.toString())
+    }
+    return newSuspendedTransaction {
+      exec(
+        sql,
+        params,
+        explicitStatementType = StatementType.SELECT
+      ) { rs ->
+        val result = mutableListOf<UserEventFirstOccurrence>()
+        while (rs.next()) {
+          result.add(
+            UserEventFirstOccurrence(
+              userId = rs.getString("user_id"),
+              eventType = rs.getString("event_type"),
+              firstOccurredAt = rs.getTimestamp("first_at")!!.time.let {
+                Instant.fromEpochMilliseconds(it)
+              }
+            )
+          )
+        }
+        result
+      } ?: emptyList()
+    }
+  }
 
     suspend fun findByProject(
         projectId: UUID,

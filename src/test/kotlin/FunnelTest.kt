@@ -1,3 +1,4 @@
+import com.artemobraz.model.FunnelAnalysisResponse
 import com.artemobraz.model.FunnelDetailResponse
 import com.artemobraz.model.FunnelResponse
 import com.artemobraz.model.FunnelStepResponse
@@ -5,11 +6,13 @@ import io.ktor.client.request.*
 import io.ktor.client.statement.*
 import io.ktor.http.*
 import io.ktor.server.testing.*
+import kotlinx.coroutines.delay
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class FunnelTest {
@@ -36,6 +39,26 @@ class FunnelTest {
     return token to projectId
   }
 
+  private suspend fun ApplicationTestBuilder.registerWithProjectAndKey(): Triple<String, String, String> {
+    val email = "funnel_ingest_${System.currentTimeMillis()}@test.com"
+    val regRes = client.post("/api/auth/register") {
+      contentType(ContentType.Application.Json)
+      setBody("""{"name":"Artem Obrazumov","email":"$email","password":"123456"}""")
+    }
+    val token = Json.parseToJsonElement(regRes.bodyAsText())
+      .jsonObject["accessToken"]!!.jsonPrimitive.content
+
+    val projectRes = client.post("/api/projects") {
+      contentType(ContentType.Application.Json)
+      bearerAuth(token)
+      setBody("""{"name":"Funnel Ingest Project"}""")
+    }
+    val projectBody = Json.parseToJsonElement(projectRes.bodyAsText()).jsonObject
+    val projectId = projectBody["project"]!!.jsonObject["id"]!!.jsonPrimitive.content
+    val apiKey = projectBody["apiKey"]!!.jsonObject["key"]!!.jsonPrimitive.content
+    return Triple(token, projectId, apiKey)
+  }
+
   private suspend fun ApplicationTestBuilder.createFunnel(
     token: String,
     projectId: String,
@@ -47,6 +70,19 @@ class FunnelTest {
       setBody("""{"name":"$name"}""")
     }
     return Json.parseToJsonElement(res.bodyAsText()).jsonObject["id"]!!.jsonPrimitive.content
+  }
+
+  private suspend fun ApplicationTestBuilder.ingestEvent(
+    apiKey: String,
+    eventType: String,
+    userId: String,
+    occurredAt: String
+  ) {
+    client.post("/api/events/ingest") {
+      header("X-API-Key", apiKey)
+      contentType(ContentType.Application.Json)
+      setBody("""{"eventType":"$eventType","userId":"$userId","occurredAt":"$occurredAt"}""")
+    }
   }
 
   @Test
@@ -233,6 +269,84 @@ class FunnelTest {
 
     val response = client.get("/api/projects/$projectId/funnels")
     assertEquals(HttpStatusCode.Unauthorized, response.status)
+  }
+
+  @Test
+  fun `analysis returns zero counts when no events ingested`() = testApplication {
+    configure()
+    val (token, projectId) = registerWithProject()
+    val funnelId = createFunnel(token, projectId)
+
+    client.post("/api/projects/$projectId/funnels/$funnelId/steps") {
+      contentType(ContentType.Application.Json)
+      bearerAuth(token)
+      setBody("""{"eventType":"step_one","label":"Step 1"}""")
+    }
+    client.post("/api/projects/$projectId/funnels/$funnelId/steps") {
+      contentType(ContentType.Application.Json)
+      bearerAuth(token)
+      setBody("""{"eventType":"step_two","label":"Step 2"}""")
+    }
+
+    val response = client.get("/api/projects/$projectId/funnels/$funnelId/analysis") {
+      bearerAuth(token)
+    }
+    assertEquals(HttpStatusCode.OK, response.status)
+    val body = json.decodeFromString<FunnelAnalysisResponse>(response.bodyAsText())
+    assertEquals(2, body.steps.size)
+    assertEquals(0L, body.steps[0].usersCount)
+    assertEquals(0L, body.steps[1].usersCount)
+    assertEquals(0.0, body.overallConversion)
+    assertNull(body.steps[0].conversionFromPrevious)
+  }
+
+  @Test
+  fun `analysis counts users conversion and avg time between steps`() = testApplication {
+    configure()
+    val (token, projectId, apiKey) = registerWithProjectAndKey()
+    val funnelId = createFunnel(token, projectId)
+
+    client.post("/api/projects/$projectId/funnels/$funnelId/steps") {
+      contentType(ContentType.Application.Json)
+      bearerAuth(token)
+      setBody("""{"eventType":"funnel_view","label":"View"}""")
+    }
+    client.post("/api/projects/$projectId/funnels/$funnelId/steps") {
+      contentType(ContentType.Application.Json)
+      bearerAuth(token)
+      setBody("""{"eventType":"funnel_cart","label":"Cart"}""")
+    }
+    client.post("/api/projects/$projectId/funnels/$funnelId/steps") {
+      contentType(ContentType.Application.Json)
+      bearerAuth(token)
+      setBody("""{"eventType":"funnel_buy","label":"Buy"}""")
+    }
+
+    ingestEvent(apiKey, "funnel_view", "u1", "2026-05-20T10:00:00Z")
+    ingestEvent(apiKey, "funnel_view", "u2", "2026-05-20T10:00:00Z")
+    ingestEvent(apiKey, "funnel_view", "u3", "2026-05-20T10:00:00Z")
+    ingestEvent(apiKey, "funnel_cart", "u1", "2026-05-20T10:05:00Z")
+    ingestEvent(apiKey, "funnel_cart", "u2", "2026-05-20T10:10:00Z")
+    ingestEvent(apiKey, "funnel_buy", "u1", "2026-05-20T10:15:00Z")
+
+    delay(500)
+
+    val response = client.get("/api/projects/$projectId/funnels/$funnelId/analysis") {
+      bearerAuth(token)
+      parameter("from", "2026-05-20T00:00:00Z")
+      parameter("to", "2026-05-21T00:00:00Z")
+    }
+    assertEquals(HttpStatusCode.OK, response.status)
+    val body = json.decodeFromString<FunnelAnalysisResponse>(response.bodyAsText())
+    assertEquals(3L, body.steps[0].usersCount)
+    assertEquals(2L, body.steps[1].usersCount)
+    assertEquals(1L, body.steps[2].usersCount)
+    assertEquals(66.67, body.steps[1].conversionFromPrevious)
+    assertEquals(33.33, body.steps[1].dropOffFromPrevious)
+    assertEquals(50.0, body.steps[2].conversionFromPrevious)
+    assertEquals(450.0, body.steps[1].avgSecondsFromPrevious)
+    assertEquals(600.0, body.steps[2].avgSecondsFromPrevious)
+    assertEquals(33.33, body.overallConversion)
   }
 
 }

@@ -55,3 +55,30 @@ data class AddFunnelStepRequest(
 data class ReorderFunnelStepsRequest(
   val stepIds: List<String>
 )
+
+@Serializable
+data class FunnelAnalysisPeriod(
+  val from: String?,
+  val to: String?
+)
+
+@Serializable
+data class FunnelStepAnalysis(
+  val stepId: String,
+  val eventType: String,
+  val label: String,
+  val stepOrder: Int,
+  val usersCount: Long,
+  val conversionFromPrevious: Double?,
+  val dropOffFromPrevious: Double?,
+  val avgSecondsFromPrevious: Double?
+)
+
+@Serializable
+data class FunnelAnalysisResponse(
+  val funnelId: String,
+  val funnelName: String,
+  val period: FunnelAnalysisPeriod,
+  val steps: List<FunnelStepAnalysis>,
+  val overallConversion: Double
+)

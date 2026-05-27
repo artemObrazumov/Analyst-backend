@@ -25,7 +25,7 @@ fun Application.configureRouting() {
     val projectService = ProjectService(projectRepository)
     val eventQueryService = EventQueryService(eventRepository, projectRepository)
     val experimentService = ExperimentService(experimentRepository, projectRepository)
-    val funnelService = FunnelService(funnelRepository, projectRepository)
+    val funnelService = FunnelService(funnelRepository, projectRepository, eventRepository)
     monitor.subscribe(ApplicationStopping) { eventQueryService.shutdown() }
 
     routing {

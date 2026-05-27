@@ -11,6 +11,7 @@ import io.ktor.server.auth.jwt.*
 import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
+import kotlinx.datetime.Instant
 import java.util.*
 
 fun Route.funnelRoutes(funnelService: FunnelService) {
@@ -54,6 +55,15 @@ fun Route.funnelRoutes(funnelService: FunnelService) {
           val id = call.pathUUID("id")
           funnelService.deleteFunnel(userId, projectId, id)
           call.respond(HttpStatusCode.NoContent)
+        }
+
+        get("/analysis") {
+          val userId = call.userId()
+          val projectId = call.pathUUID("projectId")
+          val id = call.pathUUID("id")
+          val from = call.request.queryParameters["from"]?.let { Instant.parse(it) }
+          val to = call.request.queryParameters["to"]?.let { Instant.parse(it) }
+          call.respond(funnelService.analyzeFunnel(userId, projectId, id, from, to))
         }
 
         route("/steps") {

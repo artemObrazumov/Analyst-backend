@@ -1,13 +1,16 @@
 package com.artemobraz.service
 
 import com.artemobraz.model.*
+import com.artemobraz.repository.EventRepository
 import com.artemobraz.repository.FunnelRepository
 import com.artemobraz.repository.ProjectRepository
+import kotlinx.datetime.Instant
 import java.util.*
 
 class FunnelService(
   private val funnelRepository: FunnelRepository,
-  private val projectRepository: ProjectRepository
+  private val projectRepository: ProjectRepository,
+  private val eventRepository: EventRepository
 ) {
 
   private suspend fun assertProjectAccess(userId: UUID, projectId: UUID) {
@@ -89,6 +92,103 @@ class FunnelService(
     if (uuids.toSet() != existing) throw IllegalArgumentException("stepIds must contain exactly all steps of the funnel")
     funnelRepository.reorderSteps(funnelId, uuids)
   }
+
+  suspend fun analyzeFunnel(
+    userId: UUID,
+    projectId: UUID,
+    funnelId: UUID,
+    from: Instant?,
+    to: Instant?
+  ): FunnelAnalysisResponse {
+    assertProjectAccess(userId, projectId)
+    val funnel = assertFunnelBelongsToProject(funnelId, projectId)
+    if (from != null && to != null && from > to) {
+      throw IllegalArgumentException("'from' must be before or equal to 'to'")
+    }
+
+    val steps = funnelRepository.findSteps(funnelId)
+    if (steps.isEmpty()) {
+      return FunnelAnalysisResponse(
+        funnelId = funnel.id.toString(),
+        funnelName = funnel.name,
+        period = FunnelAnalysisPeriod(from?.toString(), to?.toString()),
+        steps = emptyList(),
+        overallConversion = 0.0
+      )
+    }
+
+    val eventTypes = steps.map { it.eventType }.distinct()
+    val occurrences = eventRepository.findFirstOccurrencesByUserAndType(projectId, eventTypes, from, to)
+    val byUser = occurrences.groupBy { it.userId }
+
+    val stepCounts = LongArray(steps.size)
+    val transitionSeconds = Array(steps.size - 1) { mutableListOf<Double>() }
+
+    for (userOccurrences in byUser.values) {
+      val firstAtByType = userOccurrences.associate { it.eventType to it.firstOccurredAt }
+      var previousTime: Instant? = null
+      for (i in steps.indices) {
+        val stepTime = firstAtByType[steps[i].eventType] ?: break
+        if (previousTime != null && stepTime <= previousTime) break
+        stepCounts[i]++
+        if (i > 0 && previousTime != null) {
+          val deltaSeconds = (stepTime - previousTime).inWholeSeconds.toDouble()
+          transitionSeconds[i - 1].add(deltaSeconds)
+        }
+        previousTime = stepTime
+      }
+    }
+
+    val stepAnalyses = steps.mapIndexed { index, step ->
+      val usersCount = stepCounts[index]
+      val conversionFromPrevious = if (index == 0) {
+        null
+      } else {
+        val previousCount = stepCounts[index - 1]
+        if (previousCount == 0L) 0.0 else percent(usersCount, previousCount)
+      }
+      val dropOffFromPrevious = conversionFromPrevious?.let { roundPercent(100.0 - it) }
+      val avgSecondsFromPrevious = if (index == 0) {
+        null
+      } else {
+        val deltas = transitionSeconds[index - 1]
+        if (deltas.isEmpty()) null else roundSeconds(deltas.average())
+      }
+      FunnelStepAnalysis(
+        stepId = step.id.toString(),
+        eventType = step.eventType,
+        label = step.label,
+        stepOrder = step.stepOrder,
+        usersCount = usersCount,
+        conversionFromPrevious = conversionFromPrevious,
+        dropOffFromPrevious = dropOffFromPrevious,
+        avgSecondsFromPrevious = avgSecondsFromPrevious
+      )
+    }
+
+    val overallConversion = if (stepCounts.isEmpty() || stepCounts[0] == 0L) {
+      0.0
+    } else {
+      percent(stepCounts.last(), stepCounts[0])
+    }
+
+    return FunnelAnalysisResponse(
+      funnelId = funnel.id.toString(),
+      funnelName = funnel.name,
+      period = FunnelAnalysisPeriod(from?.toString(), to?.toString()),
+      steps = stepAnalyses,
+      overallConversion = overallConversion
+    )
+  }
+
+  private fun percent(part: Long, total: Long): Double =
+    roundPercent(part.toDouble() / total * 100)
+
+  private fun roundPercent(value: Double): Double =
+    kotlin.math.round(value * 100).toDouble() / 100
+
+  private fun roundSeconds(value: Double): Double =
+    kotlin.math.round(value * 100).toDouble() / 100
 
   private fun FunnelRow.toResponse() = FunnelResponse(
     id = id.toString(),
