@@ -18,6 +18,8 @@ tags:
     description: "App management"
   - name: analytics
     description: "Analytics queries"
+  - name: funnels
+    description: "Funnel management"
 
 paths:
   /health:
@@ -367,6 +369,275 @@ paths:
         "404":
           description: "Project not found"
 
+  /api/projects/{projectId}/funnels:
+    get:
+      tags: [ funnels ]
+      summary: "Returns all funnels for a project"
+      operationId: listFunnels
+      security:
+        - bearerAuth: [ ]
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: "List of funnels"
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/FunnelResponse"
+        "401":
+          description: "Unauthorized"
+        "403":
+          description: "Access denied"
+
+    post:
+      tags: [ funnels ]
+      summary: "Creates a new funnel"
+      operationId: createFunnel
+      security:
+        - bearerAuth: [ ]
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateFunnelRequest"
+      responses:
+        "201":
+          description: "Funnel created"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FunnelResponse"
+        "400":
+          description: "Validation error"
+        "401":
+          description: "Unauthorized"
+        "403":
+          description: "Access denied"
+
+  /api/projects/{projectId}/funnels/{id}:
+    get:
+      tags: [ funnels ]
+      summary: "Returns a funnel with its steps"
+      operationId: getFunnel
+      security:
+        - bearerAuth: [ ]
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: "Funnel with steps"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FunnelDetailResponse"
+        "403":
+          description: "Access denied"
+        "404":
+          description: "Funnel not found"
+
+    put:
+      tags: [ funnels ]
+      summary: "Updates funnel name or description"
+      operationId: updateFunnel
+      security:
+        - bearerAuth: [ ]
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateFunnelRequest"
+      responses:
+        "200":
+          description: "Updated funnel"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FunnelResponse"
+        "400":
+          description: "Validation error"
+        "403":
+          description: "Access denied"
+        "404":
+          description: "Funnel not found"
+
+    delete:
+      tags: [ funnels ]
+      summary: "Deletes a funnel and all its steps"
+      operationId: deleteFunnel
+      security:
+        - bearerAuth: [ ]
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "204":
+          description: "Deleted"
+        "403":
+          description: "Access denied"
+        "404":
+          description: "Funnel not found"
+
+  /api/projects/{projectId}/funnels/{id}/steps:
+    post:
+      tags: [ funnels ]
+      summary: "Adds a step to the funnel (appended at the end)"
+      operationId: addFunnelStep
+      security:
+        - bearerAuth: [ ]
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AddFunnelStepRequest"
+      responses:
+        "201":
+          description: "Step added"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FunnelStepResponse"
+        "400":
+          description: "Validation error"
+        "403":
+          description: "Access denied"
+        "404":
+          description: "Funnel not found"
+
+  /api/projects/{projectId}/funnels/{id}/steps/reorder:
+    put:
+      tags: [ funnels ]
+      summary: "Reorders all steps in the funnel"
+      operationId: reorderFunnelSteps
+      security:
+        - bearerAuth: [ ]
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReorderFunnelStepsRequest"
+      responses:
+        "200":
+          description: "Steps reordered"
+        "400":
+          description: "stepIds must contain exactly all steps"
+        "403":
+          description: "Access denied"
+        "404":
+          description: "Funnel not found"
+
+  /api/projects/{projectId}/funnels/{id}/steps/{stepId}:
+    delete:
+      tags: [ funnels ]
+      summary: "Removes a step from the funnel"
+      operationId: removeFunnelStep
+      security:
+        - bearerAuth: [ ]
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: stepId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "204":
+          description: "Step removed"
+        "403":
+          description: "Access denied"
+        "404":
+          description: "Step not found"
+
 components:
   schemas:
     HealthResponse:
@@ -532,6 +803,112 @@ components:
         createdAt:
           type: string
           format: date-time
+
+    CreateFunnelRequest:
+      type: object
+      required: [ name ]
+      properties:
+        name:
+          type: string
+          example: "Purchase Funnel"
+        description:
+          type: string
+          example: "Tracks user journey from view to purchase"
+
+    UpdateFunnelRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+
+    FunnelResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        projectId:
+          type: string
+          format: uuid
+        createdBy:
+          type: string
+          format: uuid
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    FunnelDetailResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        projectId:
+          type: string
+          format: uuid
+        createdBy:
+          type: string
+          format: uuid
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        steps:
+          type: array
+          items:
+            $ref: "#/components/schemas/FunnelStepResponse"
+
+    FunnelStepResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        eventType:
+          type: string
+        label:
+          type: string
+        stepOrder:
+          type: integer
+
+    AddFunnelStepRequest:
+      type: object
+      required: [ eventType, label ]
+      properties:
+        eventType:
+          type: string
+          example: "button_click"
+        label:
+          type: string
+          example: "Clicked Buy"
+
+    ReorderFunnelStepsRequest:
+      type: object
+      required: [ stepIds ]
+      properties:
+        stepIds:
+          type: array
+          items:
+            type: string
+            format: uuid
+          description: "All step IDs of the funnel in the desired order"
 
   securitySchemes:
     bearerAuth:
