@@ -78,6 +78,9 @@ class ExperimentService(
   ): ExperimentGroupResponse {
     assertProjectAccess(userId, projectId)
     assertExperimentBelongsToProject(experimentId, projectId)
+    if (propertyKey.isBlank()) throw IllegalArgumentException("Property key is required")
+    if (propertyValue.isBlank()) throw IllegalArgumentException("Property value is required")
+    if (label.isBlank()) throw IllegalArgumentException("Group label is required")
     return experimentRepository.addGroup(experimentId, propertyKey, propertyValue, label).toGroupResponse()
   }
 
@@ -98,6 +101,7 @@ class ExperimentService(
   ): ExperimentEventResponse {
     assertProjectAccess(userId, projectId)
     assertExperimentBelongsToProject(experimentId, projectId)
+    if (eventType.isBlank()) throw IllegalArgumentException("Event type is required")
     return experimentRepository.addExperimentEvent(experimentId, eventType, note).toEventResponse()
   }
 

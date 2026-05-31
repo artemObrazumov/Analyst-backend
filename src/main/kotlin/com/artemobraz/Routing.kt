@@ -20,12 +20,14 @@ fun Application.configureRouting() {
     val eventRepository = EventRepository()
     val experimentRepository = ExperimentRepository()
     val funnelRepository = FunnelRepository()
+    val dashboardRepository = DashboardRepository()
     val authService = AuthService(environment.config, userRepository, redis)
     val userService = UserService(userRepository)
     val projectService = ProjectService(projectRepository)
     val eventQueryService = EventQueryService(eventRepository, projectRepository)
     val experimentService = ExperimentService(experimentRepository, projectRepository)
     val funnelService = FunnelService(funnelRepository, projectRepository, eventRepository)
+    val dashboardService = DashboardService(dashboardRepository, projectRepository, eventRepository)
     monitor.subscribe(ApplicationStopping) { eventQueryService.shutdown() }
 
     routing {
@@ -45,6 +47,7 @@ fun Application.configureRouting() {
             eventRoutes(eventQueryService)
             experimentRoutes(experimentService)
             funnelRoutes(funnelService)
+            dashboardRoutes(dashboardService)
         }
     }
 }

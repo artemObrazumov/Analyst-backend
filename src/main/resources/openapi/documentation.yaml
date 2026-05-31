@@ -18,8 +18,12 @@ tags:
     description: "App management"
   - name: analytics
     description: "Analytics queries"
+  - name: experiments
+    description: "A/B experiment management"
   - name: funnels
     description: "Funnel management"
+  - name: dashboards
+    description: "Dashboard management"
 
 paths:
   /health:
@@ -369,6 +373,382 @@ paths:
         "404":
           description: "Project not found"
 
+  /api/projects/{projectId}/experiments:
+    get:
+      tags: [ experiments ]
+      summary: "Returns all experiments for a project"
+      operationId: listExperiments
+      security:
+        - bearerAuth: [ ]
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: "List of experiments"
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ExperimentResponse"
+        "401":
+          description: "Unauthorized"
+        "403":
+          description: "Access denied"
+    post:
+      tags: [ experiments ]
+      summary: "Creates a new experiment"
+      operationId: createExperiment
+      security:
+        - bearerAuth: [ ]
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateExperimentRequest"
+      responses:
+        "201":
+          description: "Experiment created"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExperimentResponse"
+        "400":
+          description: "Validation error"
+        "401":
+          description: "Unauthorized"
+        "403":
+          description: "Access denied"
+
+  /api/projects/{projectId}/experiments/{id}:
+    get:
+      tags: [ experiments ]
+      summary: "Returns an experiment with groups and tracked events"
+      operationId: getExperiment
+      security:
+        - bearerAuth: [ ]
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: "Experiment detail"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExperimentDetailResponse"
+        "403":
+          description: "Access denied"
+        "404":
+          description: "Experiment not found"
+    put:
+      tags: [ experiments ]
+      summary: "Updates experiment name, description or result"
+      operationId: updateExperiment
+      security:
+        - bearerAuth: [ ]
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateExperimentRequest"
+      responses:
+        "200":
+          description: "Updated experiment"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExperimentResponse"
+        "400":
+          description: "Validation error"
+        "403":
+          description: "Access denied"
+        "404":
+          description: "Experiment not found"
+    delete:
+      tags: [ experiments ]
+      summary: "Deletes an experiment and its groups and tracked events"
+      operationId: deleteExperiment
+      security:
+        - bearerAuth: [ ]
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "204":
+          description: "Deleted"
+        "403":
+          description: "Access denied"
+        "404":
+          description: "Experiment not found"
+
+  /api/projects/{projectId}/experiments/{id}/status:
+    put:
+      tags: [ experiments ]
+      summary: "Updates experiment status"
+      operationId: updateExperimentStatus
+      security:
+        - bearerAuth: [ ]
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateExperimentStatusRequest"
+      responses:
+        "200":
+          description: "Status updated"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExperimentResponse"
+        "400":
+          description: "Invalid status"
+        "403":
+          description: "Access denied"
+        "404":
+          description: "Experiment not found"
+
+  /api/projects/{projectId}/experiments/{id}/analysis:
+    get:
+      tags: [ experiments ]
+      summary: "Returns conversion metrics per experiment group"
+      operationId: analyzeExperiment
+      security:
+        - bearerAuth: [ ]
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: "Analysis result"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExperimentAnalysisResponse"
+        "403":
+          description: "Access denied"
+        "404":
+          description: "Experiment not found"
+
+  /api/projects/{projectId}/experiments/{id}/groups:
+    post:
+      tags: [ experiments ]
+      summary: "Adds a variant group to the experiment"
+      operationId: addExperimentGroup
+      security:
+        - bearerAuth: [ ]
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AddExperimentGroupRequest"
+      responses:
+        "201":
+          description: "Group added"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExperimentGroupResponse"
+        "400":
+          description: "Validation error"
+        "403":
+          description: "Access denied"
+        "404":
+          description: "Experiment not found"
+
+  /api/projects/{projectId}/experiments/{id}/groups/{gid}:
+    delete:
+      tags: [ experiments ]
+      summary: "Removes a group from the experiment"
+      operationId: removeExperimentGroup
+      security:
+        - bearerAuth: [ ]
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: gid
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "204":
+          description: "Group removed"
+        "403":
+          description: "Access denied"
+        "404":
+          description: "Group not found"
+
+  /api/projects/{projectId}/experiments/{id}/events:
+    post:
+      tags: [ experiments ]
+      summary: "Links an event type to the experiment for conversion tracking"
+      operationId: addExperimentEvent
+      security:
+        - bearerAuth: [ ]
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AddExperimentEventRequest"
+      responses:
+        "201":
+          description: "Event link added"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExperimentEventResponse"
+        "400":
+          description: "Validation error"
+        "403":
+          description: "Access denied"
+        "404":
+          description: "Experiment not found"
+
+  /api/projects/{projectId}/experiments/{id}/events/{eid}:
+    delete:
+      tags: [ experiments ]
+      summary: "Removes an event type link from the experiment"
+      operationId: removeExperimentEvent
+      security:
+        - bearerAuth: [ ]
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: eid
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "204":
+          description: "Event link removed"
+        "403":
+          description: "Access denied"
+        "404":
+          description: "Event link not found"
+
   /api/projects/{projectId}/funnels:
     get:
       tags: [ funnels ]
@@ -687,6 +1067,309 @@ paths:
           description: "Access denied"
         "404":
           description: "Step not found"
+
+  /api/projects/{projectId}/dashboards:
+    get:
+      tags: [ dashboards ]
+      summary: "Returns all dashboards for a project"
+      operationId: listDashboards
+      security:
+        - bearerAuth: [ ]
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: "List of dashboards"
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/DashboardResponse"
+    post:
+      tags: [ dashboards ]
+      summary: "Creates a new dashboard"
+      operationId: createDashboard
+      security:
+        - bearerAuth: [ ]
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateDashboardRequest"
+      responses:
+        "201":
+          description: "Dashboard created"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardResponse"
+
+  /api/projects/{projectId}/dashboards/{id}:
+    get:
+      tags: [ dashboards ]
+      summary: "Returns a dashboard with chart configuration"
+      operationId: getDashboard
+      security:
+        - bearerAuth: [ ]
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: "Dashboard detail"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardDetailResponse"
+    put:
+      tags: [ dashboards ]
+      summary: "Updates dashboard name or description"
+      operationId: updateDashboard
+      security:
+        - bearerAuth: [ ]
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateDashboardRequest"
+      responses:
+        "200":
+          description: "Updated dashboard"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardResponse"
+    delete:
+      tags: [ dashboards ]
+      summary: "Deletes a dashboard and all its charts"
+      operationId: deleteDashboard
+      security:
+        - bearerAuth: [ ]
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "204":
+          description: "Deleted"
+
+  /api/projects/{projectId}/dashboards/{id}/page:
+    get:
+      tags: [ dashboards ]
+      summary: "Returns dashboard page with chart data for rendering"
+      operationId: getDashboardPage
+      security:
+        - bearerAuth: [ ]
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: from
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: to
+          in: query
+          schema:
+            type: string
+            format: date-time
+      responses:
+        "200":
+          description: "Dashboard page with time-series chart data"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardPageResponse"
+
+  /api/projects/{projectId}/dashboards/{id}/charts:
+    post:
+      tags: [ dashboards ]
+      summary: "Adds a chart to the dashboard"
+      operationId: addDashboardChart
+      security:
+        - bearerAuth: [ ]
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AddDashboardChartRequest"
+      responses:
+        "201":
+          description: "Chart added"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardChartResponse"
+
+  /api/projects/{projectId}/dashboards/{id}/charts/reorder:
+    put:
+      tags: [ dashboards ]
+      summary: "Reorders charts on the dashboard"
+      operationId: reorderDashboardCharts
+      security:
+        - bearerAuth: [ ]
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReorderDashboardChartsRequest"
+      responses:
+        "200":
+          description: "Charts reordered"
+
+  /api/projects/{projectId}/dashboards/{id}/charts/{chartId}:
+    put:
+      tags: [ dashboards ]
+      summary: "Updates a chart on the dashboard"
+      operationId: updateDashboardChart
+      security:
+        - bearerAuth: [ ]
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: chartId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateDashboardChartRequest"
+      responses:
+        "200":
+          description: "Chart updated"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardChartResponse"
+
+    delete:
+      tags: [ dashboards ]
+      summary: "Removes a chart from the dashboard"
+      operationId: removeDashboardChart
+      security:
+        - bearerAuth: [ ]
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: chartId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "204":
+          description: "Chart removed"
 
 components:
   schemas:
@@ -1022,6 +1705,372 @@ components:
           type: number
           format: double
           description: "Percent of first-step users who reached the last step"
+
+    CreateExperimentRequest:
+      type: object
+      required: [ name ]
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+
+    UpdateExperimentRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        result:
+          type: string
+          nullable: true
+          description: "Experiment outcome notes (e.g. winner variant)"
+
+    UpdateExperimentStatusRequest:
+      type: object
+      required: [ status ]
+      properties:
+        status:
+          type: string
+          enum: [ draft, active, archived ]
+
+    ExperimentResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        projectId:
+          type: string
+          format: uuid
+        createdBy:
+          type: string
+          format: uuid
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        status:
+          type: string
+          enum: [ draft, active, archived ]
+        result:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    ExperimentGroupResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        propertyKey:
+          type: string
+          description: "Key in event properties JSON used to identify the variant"
+        propertyValue:
+          type: string
+          description: "Value of the property for this group"
+        label:
+          type: string
+          description: "Human-readable group name for UI"
+
+    ExperimentEventResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        eventType:
+          type: string
+          description: "Event type from POST /api/events/ingest"
+        note:
+          type: string
+          nullable: true
+
+    ExperimentDetailResponse:
+      allOf:
+        - $ref: "#/components/schemas/ExperimentResponse"
+        - type: object
+          properties:
+            groups:
+              type: array
+              items:
+                $ref: "#/components/schemas/ExperimentGroupResponse"
+            events:
+              type: array
+              items:
+                $ref: "#/components/schemas/ExperimentEventResponse"
+
+    AddExperimentGroupRequest:
+      type: object
+      required: [ propertyKey, propertyValue, label ]
+      properties:
+        propertyKey:
+          type: string
+          example: "checkout_layout"
+        propertyValue:
+          type: string
+          example: "scroll"
+        label:
+          type: string
+          example: "Single-page checkout"
+
+    AddExperimentEventRequest:
+      type: object
+      required: [ eventType ]
+      properties:
+        eventType:
+          type: string
+          example: "checkout_completed"
+        note:
+          type: string
+          nullable: true
+
+    GroupAnalysisResponse:
+      type: object
+      properties:
+        label:
+          type: string
+        propertyKey:
+          type: string
+        propertyValue:
+          type: string
+        exposed:
+          type: integer
+          format: int64
+          description: "Users who sent any tracked event with this group's property"
+        converted:
+          type: integer
+          format: int64
+          description: "Exposed users who sent all tracked event types"
+        conversionRate:
+          type: number
+          format: double
+          description: "converted / exposed * 100, percent with 2 decimal places"
+
+    ExperimentAnalysisResponse:
+      type: object
+      properties:
+        experimentId:
+          type: string
+          format: uuid
+        experimentName:
+          type: string
+        trackedEvents:
+          type: array
+          items:
+            type: string
+          description: "Event types linked to the experiment"
+        groups:
+          type: array
+          items:
+            $ref: "#/components/schemas/GroupAnalysisResponse"
+
+    CreateDashboardRequest:
+      type: object
+      required: [ name ]
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+
+    UpdateDashboardRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+
+    DashboardResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        projectId:
+          type: string
+          format: uuid
+        createdBy:
+          type: string
+          format: uuid
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    DashboardDetailResponse:
+      allOf:
+        - $ref: "#/components/schemas/DashboardResponse"
+        - type: object
+          properties:
+            charts:
+              type: array
+              items:
+                $ref: "#/components/schemas/DashboardChartResponse"
+
+    DashboardChartResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        chartType:
+          type: string
+          enum: [ line, bar, area ]
+        eventType:
+          type: string
+        chartOrder:
+          type: integer
+        filters:
+          $ref: "#/components/schemas/ChartFilters"
+
+    ChartFilters:
+      type: object
+      properties:
+        platform:
+          type: string
+          nullable: true
+        country:
+          type: string
+          nullable: true
+          description: "ISO 3166-1 alpha-2 country code"
+        deviceId:
+          type: string
+          nullable: true
+        userId:
+          type: string
+          nullable: true
+        appVersion:
+          type: string
+          nullable: true
+        osVersion:
+          type: string
+          nullable: true
+        properties:
+          type: object
+          additionalProperties:
+            type: string
+
+    AddDashboardChartRequest:
+      type: object
+      required: [ title, eventType ]
+      properties:
+        title:
+          type: string
+        chartType:
+          type: string
+          enum: [ line, bar, area ]
+          default: line
+        eventType:
+          type: string
+        filters:
+          $ref: "#/components/schemas/ChartFilters"
+
+    UpdateDashboardChartRequest:
+      type: object
+      required: [ title, eventType ]
+      properties:
+        title:
+          type: string
+        chartType:
+          type: string
+          enum: [ line, bar, area ]
+          default: line
+        eventType:
+          type: string
+        filters:
+          $ref: "#/components/schemas/ChartFilters"
+
+    ReorderDashboardChartsRequest:
+      type: object
+      required: [ chartIds ]
+      properties:
+        chartIds:
+          type: array
+          items:
+            type: string
+            format: uuid
+
+    DashboardPagePeriod:
+      type: object
+      properties:
+        from:
+          type: string
+          format: date-time
+          nullable: true
+        to:
+          type: string
+          format: date-time
+          nullable: true
+
+    ChartDataPoint:
+      type: object
+      properties:
+        date:
+          type: string
+          format: date
+        count:
+          type: integer
+          format: int64
+
+    DashboardChartWithData:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        chartType:
+          type: string
+        eventType:
+          type: string
+        chartOrder:
+          type: integer
+        filters:
+          $ref: "#/components/schemas/ChartFilters"
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/ChartDataPoint"
+
+    DashboardPageResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        period:
+          $ref: "#/components/schemas/DashboardPagePeriod"
+        charts:
+          type: array
+          items:
+            $ref: "#/components/schemas/DashboardChartWithData"
 
   securitySchemes:
     bearerAuth:

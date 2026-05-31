@@ -1,9 +1,13 @@
 package com.artemobraz.repository
 
+import com.artemobraz.model.ChartFilters
 import com.artemobraz.model.EventRow
 import com.artemobraz.model.Events
 import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.statements.StatementType
 import org.jetbrains.exposed.sql.transactions.experimental.newSuspendedTransaction
@@ -13,6 +17,11 @@ data class UserEventFirstOccurrence(
   val userId: String,
   val eventType: String,
   val firstOccurredAt: Instant
+)
+
+data class EventCountByDay(
+  val date: String,
+  val count: Long
 )
 
 private const val FIRST_OCCURRENCES_SQL = """
@@ -108,6 +117,67 @@ class EventRepository {
               firstOccurredAt = rs.getTimestamp("first_at")!!.time.let {
                 Instant.fromEpochMilliseconds(it)
               }
+            )
+          )
+        }
+        result
+      } ?: emptyList()
+    }
+  }
+
+  suspend fun countEventsByDay(
+    projectId: UUID,
+    eventType: String,
+    filters: ChartFilters = ChartFilters(),
+    from: Instant? = null,
+    to: Instant? = null
+  ): List<EventCountByDay> {
+    val sql = buildString {
+      append(
+        """
+        SELECT DATE_TRUNC('day', occurred_at AT TIME ZONE 'UTC')::date AS bucket, COUNT(*) AS cnt
+        FROM events
+        WHERE project_id = CAST(? AS uuid)
+          AND event_type = ?
+        """.trimIndent()
+      )
+      if (filters.platform != null) append("\n  AND platform = ?")
+      if (filters.country != null) append("\n  AND country = ?")
+      if (filters.deviceId != null) append("\n  AND device_id = ?")
+      if (filters.userId != null) append("\n  AND user_id = ?")
+      if (filters.appVersion != null) append("\n  AND app_version = ?")
+      if (filters.osVersion != null) append("\n  AND os_version = ?")
+      if (filters.properties.isNotEmpty()) append("\n  AND properties @> CAST(? AS jsonb)")
+      if (from != null) append("\n  AND occurred_at >= CAST(? AS timestamptz)")
+      if (to != null) append("\n  AND occurred_at <= CAST(? AS timestamptz)")
+      append("\nGROUP BY bucket\nORDER BY bucket")
+    }
+    val propertiesJson = if (filters.properties.isNotEmpty()) {
+      Json.encodeToString(
+        buildJsonObject { filters.properties.forEach { (key, value) -> put(key, value) } }
+      )
+    } else null
+    val params = buildList {
+      add(TextColumnType() to projectId.toString())
+      add(TextColumnType() to eventType)
+      if (filters.platform != null) add(TextColumnType() to filters.platform)
+      if (filters.country != null) add(TextColumnType() to filters.country)
+      if (filters.deviceId != null) add(TextColumnType() to filters.deviceId)
+      if (filters.userId != null) add(TextColumnType() to filters.userId)
+      if (filters.appVersion != null) add(TextColumnType() to filters.appVersion)
+      if (filters.osVersion != null) add(TextColumnType() to filters.osVersion)
+      if (propertiesJson != null) add(TextColumnType() to propertiesJson)
+      if (from != null) add(TextColumnType() to from.toString())
+      if (to != null) add(TextColumnType() to to.toString())
+    }
+    return newSuspendedTransaction {
+      exec(sql, params, explicitStatementType = StatementType.SELECT) { rs ->
+        val result = mutableListOf<EventCountByDay>()
+        while (rs.next()) {
+          result.add(
+            EventCountByDay(
+              date = rs.getDate("bucket").toLocalDate().toString(),
+              count = rs.getLong("cnt")
             )
           )
         }

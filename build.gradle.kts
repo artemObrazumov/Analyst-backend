@@ -71,6 +71,18 @@ val dbUrl = project.findProperty("db.url") as? String ?: "jdbc:postgresql://loca
 val dbUser = project.findProperty("db.user") as? String ?: "analytics"
 val dbPassword = project.findProperty("db.password") as? String ?: "secret"
 
+tasks.register<JavaExec>("dbClean") {
+  group = "database"
+  description = "Drop all PostgreSQL data, re-migrate schema, flush Redis"
+  dependsOn("classes", "dockerUp")
+  classpath = sourceSets["main"].runtimeClasspath
+  mainClass = "com.artemobraz.CleanDbKt"
+  environment("DB_URL", dbUrl)
+  environment("DB_USER", dbUser)
+  environment("DB_PASSWORD", dbPassword)
+  environment("REDIS_URL", project.findProperty("redis.url") as? String ?: "redis://localhost:6379")
+}
+
 tasks.register<JavaExec>("dbMigrate") {
   group = "database"
   description = "Run Flyway migrations against the local database"
@@ -145,3 +157,11 @@ tasks.register("dockerDown") {
 tasks.named("dbMigrate") { dependsOn("dockerUp") }
 tasks.named("run") { dependsOn("dbMigrate") }
 tasks.named("test") { dependsOn("dbMigrate") }
+
+tasks.register<JavaExec>("seedCheckoutDemo") {
+  group = "demo"
+  description = "Seed checkout A/B demo events, experiment, funnel and dashboards"
+  dependsOn("classes", "dbMigrate")
+  classpath = sourceSets["main"].runtimeClasspath
+  mainClass = "com.artemobraz.scripts.checkoutseed.CheckoutSeedRunnerKt"
+}
