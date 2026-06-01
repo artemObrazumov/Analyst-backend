@@ -291,36 +291,36 @@ class EventRepository {
       } ?: emptyList()
     }
 
-    suspend fun findByProject(
-        projectId: UUID,
-        limit: Int,
-        from: Instant? = null,
-        to: Instant? = null
-    ): List<EventRow> = newSuspendedTransaction {
-        Events.selectAll()
-            .where { Events.projectId eq projectId }
-            .apply {
-                if (from != null) andWhere { Events.occurredAt greaterEq from }
-                if (to != null) andWhere { Events.occurredAt lessEq to }
-            }
-            .orderBy(Events.occurredAt, SortOrder.DESC)
-            .limit(limit)
-            .map { it.toRow() }
-    }
+  suspend fun findByProject(
+    projectId: UUID,
+    limit: Int,
+    from: Instant? = null,
+    to: Instant? = null
+  ): List<EventRow> = newSuspendedTransaction {
+    Events.selectAll()
+      .where { Events.projectId eq projectId }
+      .apply {
+        if (from != null) andWhere { Events.occurredAt greaterEq from }
+        if (to != null) andWhere { Events.occurredAt lessEq to }
+      }
+      .orderBy(Events.occurredAt, SortOrder.DESC)
+      .limit(limit)
+      .map { it.toRow() }
+  }
 
-    private fun ResultRow.toRow() = EventRow(
-        id = this[Events.id],
-        projectId = this[Events.projectId].value,
-        occurredAt = this[Events.occurredAt],
-        receivedAt = this[Events.receivedAt],
-        sessionId = this[Events.sessionId],
-        deviceId = this[Events.deviceId],
-        userId = this[Events.userId],
-        eventType = this[Events.eventType],
-        platform = this[Events.platform],
-        appVersion = this[Events.appVersion],
-        osVersion = this[Events.osVersion],
-        country = this[Events.country],
-        properties = this[Events.properties]
-    )
+  private fun ResultRow.toRow() = EventRow(
+    id = this[Events.id],
+    projectId = this[Events.projectId].value,
+    occurredAt = this[Events.occurredAt],
+    receivedAt = this[Events.receivedAt],
+    sessionId = this[Events.sessionId],
+    deviceId = this[Events.deviceId],
+    userId = this[Events.userId],
+    eventType = this[Events.eventType],
+    platform = this[Events.platform],
+    appVersion = this[Events.appVersion],
+    osVersion = this[Events.osVersion],
+    country = this[Events.country],
+    properties = this[Events.properties]
+  )
 }

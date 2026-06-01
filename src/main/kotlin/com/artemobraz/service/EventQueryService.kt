@@ -22,7 +22,7 @@ class EventQueryService(
   private val projectRepository: ProjectRepository
 ) {
   private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
-  private val channel = Channel<PendingEvent>(capacity = 10_000)
+  private val channel = Channel<PendingEvent>(Channel.UNLIMITED)
   private val consumerJob: Job
 
   init {
@@ -55,25 +55,15 @@ class EventQueryService(
     scope.cancel()
   }
 
-  suspend fun ingest(apiKey: String, request: IngestEventRequest): Boolean {
+  suspend fun ingestBatch(apiKey: String, requests: List<IngestEventRequest>): Int {
+    if (requests.isEmpty()) return 0
     val projectId = projectRepository.findProjectIdByKeyHash(sha256(apiKey))
       ?: throw AuthenticationException("Invalid API key")
-
-    val pending = PendingEvent(
-      projectId = projectId,
-      eventType = request.eventType,
-      occurredAt = request.occurredAt?.let { Instant.parse(it) } ?: Clock.System.now(),
-      sessionId = request.sessionId?.let { UUID.fromString(it) },
-      deviceId = request.deviceId,
-      userId = request.userId,
-      platform = request.platform,
-      appVersion = request.appVersion,
-      osVersion = request.osVersion,
-      country = request.country,
-      properties = Json.encodeToString(JsonObject.serializer(), request.properties)
-    )
-
-    return channel.trySend(pending).isSuccess
+    for (request in requests) {
+      if (request.eventType.isBlank()) throw IllegalArgumentException("eventType is required")
+      channel.send(toPending(projectId, request))
+    }
+    return requests.size
   }
 
   suspend fun list(
@@ -83,6 +73,20 @@ class EventQueryService(
     to: Instant? = null
   ): List<EventDto> =
     eventRepository.findByProject(projectId, limit.coerceIn(1, 1000), from, to).map { it.toDto() }
+
+  private fun toPending(projectId: UUID, request: IngestEventRequest) = PendingEvent(
+    projectId = projectId,
+    eventType = request.eventType,
+    occurredAt = request.occurredAt?.let { Instant.parse(it) } ?: Clock.System.now(),
+    sessionId = request.sessionId?.let { UUID.fromString(it) },
+    deviceId = request.deviceId,
+    userId = request.userId,
+    platform = request.platform,
+    appVersion = request.appVersion,
+    osVersion = request.osVersion,
+    country = request.country,
+    properties = Json.encodeToString(JsonObject.serializer(), request.properties)
+  )
 
   private data class PendingEvent(
     val projectId: UUID,

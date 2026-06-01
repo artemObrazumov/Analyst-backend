@@ -78,7 +78,7 @@ class DashboardTest {
     client.post("/api/events/ingest") {
       header("X-API-Key", apiKey)
       contentType(ContentType.Application.Json)
-      setBody(body)
+      setBody("""{"events":[$body]}""")
     }
   }
 

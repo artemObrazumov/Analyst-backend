@@ -2,7 +2,6 @@ package com.artemobraz.model
 
 import org.jetbrains.exposed.sql.Table
 import org.jetbrains.exposed.sql.kotlin.datetime.timestamp
-import java.util.*
 
 object EventsHourly : Table("events_hourly") {
   val bucketTime = timestamp("bucket_time")
@@ -21,10 +20,3 @@ object RevokedRefreshTokens : Table("revoked_refresh_tokens") {
 
   override val primaryKey = PrimaryKey(tokenHash)
 }
-
-data class RevokedRefreshTokenRow(
-  val tokenHash: String,
-  val userId: UUID,
-  val revokedAt: kotlinx.datetime.Instant,
-  val expiresAt: kotlinx.datetime.Instant
-)

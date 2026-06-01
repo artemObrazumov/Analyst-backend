@@ -1,6 +1,7 @@
 package com.artemobraz.routing
 
-import com.artemobraz.model.IngestEventRequest
+import com.artemobraz.model.IngestEventsRequest
+import com.artemobraz.model.IngestEventsResponse
 import com.artemobraz.service.EventQueryService
 import io.ktor.http.*
 import io.ktor.server.auth.*
@@ -18,16 +19,9 @@ fun Route.eventRoutes(eventQueryService: EventQueryService) {
                     HttpStatusCode.Unauthorized,
                     mapOf("error" to "UNAUTHORIZED", "message" to "Missing X-API-Key header")
                 )
-            val body = call.receive<IngestEventRequest>()
-            val accepted = eventQueryService.ingest(apiKey, body)
-            if (accepted) {
-                call.respond(HttpStatusCode.Accepted)
-            } else {
-                call.respond(
-                    HttpStatusCode.ServiceUnavailable,
-                    mapOf("error" to "QUEUE_FULL", "message" to "Ingest queue is full, retry later")
-                )
-            }
+            val body = call.receive<IngestEventsRequest>()
+            val accepted = eventQueryService.ingestBatch(apiKey, body.events)
+            call.respond(HttpStatusCode.OK, IngestEventsResponse(accepted = accepted))
         }
 
         authenticate("admin-jwt") {

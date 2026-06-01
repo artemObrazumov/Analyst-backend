@@ -169,7 +169,7 @@ paths:
   /api/auth/logout:
     post:
       tags: [ auth ]
-      summary: "Invalidates a refresh token (no JWT required)"
+      summary: "Invalidates a refresh token without requiring an access JWT"
       operationId: logout
       requestBody:
         required: true
@@ -184,7 +184,7 @@ paths:
   /api/users/me/logout:
     post:
       tags: [ auth ]
-      summary: "Revokes both access and refresh tokens, invalidating the session completely"
+      summary: "Revokes the refresh token (client should discard access token locally)"
       operationId: userLogout
       security:
         - bearerAuth: [ ]
@@ -372,6 +372,75 @@ paths:
           description: "Access denied"
         "404":
           description: "Project not found"
+
+  /api/events/ingest:
+    post:
+      tags: [ events ]
+      summary: "Accepts a batch of events into memory; persists to DB asynchronously"
+      operationId: ingestEvents
+      security:
+        - apiKeyAuth: [ ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/IngestEventsRequest"
+      responses:
+        "200":
+          description: "All events accepted into the ingest queue"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IngestEventsResponse"
+        "400":
+          description: "Invalid event payload"
+        "401":
+          description: "Invalid or missing API key"
+
+  /api/events:
+    get:
+      tags: [ events ]
+      summary: "Returns recent raw events for a project (admin debugging)"
+      operationId: listEvents
+      security:
+        - bearerAuth: [ ]
+      parameters:
+        - name: projectId
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 100
+            maximum: 1000
+        - name: from
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: to
+          in: query
+          schema:
+            type: string
+            format: date-time
+      responses:
+        "200":
+          description: "List of events"
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/EventDto"
+        "400":
+          description: "Missing projectId"
+        "401":
+          description: "Unauthorized"
 
   /api/projects/{projectId}/experiments:
     get:
@@ -1445,6 +1514,93 @@ components:
           type: integer
           description: "Access token lifetime in seconds"
           example: 900
+
+    IngestEventRequest:
+      type: object
+      required: [ eventType ]
+      properties:
+        eventType:
+          type: string
+        occurredAt:
+          type: string
+          format: date-time
+        sessionId:
+          type: string
+          format: uuid
+        deviceId:
+          type: string
+        userId:
+          type: string
+        platform:
+          type: string
+        appVersion:
+          type: string
+        osVersion:
+          type: string
+        country:
+          type: string
+        properties:
+          type: object
+          additionalProperties: true
+
+    IngestEventsRequest:
+      type: object
+      required: [ events ]
+      properties:
+        events:
+          type: array
+          items:
+            $ref: "#/components/schemas/IngestEventRequest"
+
+    IngestEventsResponse:
+      type: object
+      properties:
+        accepted:
+          type: integer
+          description: "Number of events placed into the in-memory queue"
+
+    EventDto:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        projectId:
+          type: string
+          format: uuid
+        eventType:
+          type: string
+        occurredAt:
+          type: string
+          format: date-time
+        receivedAt:
+          type: string
+          format: date-time
+        sessionId:
+          type: string
+          format: uuid
+          nullable: true
+        deviceId:
+          type: string
+          nullable: true
+        userId:
+          type: string
+          nullable: true
+        platform:
+          type: string
+          nullable: true
+        appVersion:
+          type: string
+          nullable: true
+        osVersion:
+          type: string
+          nullable: true
+        country:
+          type: string
+          nullable: true
+        properties:
+          type: object
+          additionalProperties: true
 
     UserResponse:
       type: object

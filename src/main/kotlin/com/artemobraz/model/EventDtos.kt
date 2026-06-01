@@ -18,6 +18,16 @@ data class IngestEventRequest(
 )
 
 @Serializable
+data class IngestEventsRequest(
+  val events: List<IngestEventRequest>
+)
+
+@Serializable
+data class IngestEventsResponse(
+  val accepted: Int
+)
+
+@Serializable
 data class EventDto(
   val id: String,
   val projectId: String,

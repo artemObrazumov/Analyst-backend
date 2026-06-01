@@ -2,8 +2,6 @@ package com.artemobraz.scripts.checkoutseed
 
 import com.artemobraz.scripts.checkoutseed.CheckoutSeedRunner.email
 import kotlinx.coroutines.*
-import kotlinx.coroutines.sync.Semaphore
-import kotlinx.coroutines.sync.withPermit
 import kotlinx.serialization.json.*
 import java.net.ConnectException
 import java.net.URI
@@ -595,26 +593,30 @@ object CheckoutSeedRunner {
 
   private fun isMidWeekSpikeDay(dayIndex: Int): Boolean = dayIndex in 3..4
 
-  private suspend fun ingestEvents(apiKey: String, events: List<DemoEvent>) = coroutineScope {
-    val semaphore = Semaphore(48)
-    events.chunked(200).forEachIndexed { batchIdx, batch ->
-      batch.map { event ->
-        async(Dispatchers.IO) {
-          semaphore.withPermit { ingestOne(apiKey, event) }
-        }
-      }.awaitAll()
-      if ((batchIdx + 1) % 10 == 0) {
-        println("  … ${(batchIdx + 1) * 200} / ${events.size}")
+  private suspend fun ingestEvents(apiKey: String, events: List<DemoEvent>) {
+    events.chunked(INGEST_BATCH_SIZE).forEachIndexed { batchIdx, batch ->
+      ingestBatch(apiKey, batch)
+      if ((batchIdx + 1) % 20 == 0) {
+        println("  … ${minOf((batchIdx + 1) * INGEST_BATCH_SIZE, events.size)} / ${events.size}")
       }
     }
   }
 
-  private suspend fun ingestOne(apiKey: String, event: DemoEvent) {
+  private suspend fun ingestBatch(apiKey: String, batch: List<DemoEvent>) {
+    val items = batch.joinToString(",") { eventToIngestJson(it) }
+    val body = """{"events":[$items]}"""
+    val response = post("/api/events/ingest", body, apiKey = apiKey)
+    require(response.statusCode() == 200) {
+      "Ingest batch failed (${response.statusCode()}): ${response.body()}"
+    }
+  }
+
+  private fun eventToIngestJson(event: DemoEvent): String {
     require(event.platform in CheckoutSeedConfig.PLATFORMS) {
       "platform must be ios or android for ${event.eventType}, got: ${event.platform}"
     }
     val propsJson = json.encodeToString(JsonObject.serializer(), event.properties)
-    val body = buildString {
+    return buildString {
       append("""{"eventType":"${event.eventType}",""")
       append(""""userId":"${event.userId}",""")
       append(""""platform":"${event.platform}",""")
@@ -624,23 +626,9 @@ object CheckoutSeedRunner {
       append(""""properties":$propsJson""")
       append("}")
     }
-
-    for (attempt in 0..INGEST_MAX_RETRIES) {
-      val response = post("/api/events/ingest", body, apiKey = apiKey)
-      if (response.statusCode() == 202) return
-      if (response.statusCode() == 503 && isQueueFull(response) && attempt < INGEST_MAX_RETRIES) {
-        delay(INGEST_RETRY_DELAY_MS)
-        continue
-      }
-      error("Ingest failed (${response.statusCode()}): ${response.body()} for ${event.eventType}")
-    }
   }
 
-  private fun isQueueFull(response: HttpResponse<String>): Boolean =
-    response.statusCode() == 503 && response.body().contains("QUEUE_FULL")
-
-  private const val INGEST_MAX_RETRIES = 5
-  private const val INGEST_RETRY_DELAY_MS = 2_000L
+  private const val INGEST_BATCH_SIZE = 50
 
   private fun get(path: String, bearer: String? = null): HttpResponse<String> =
     request("GET", path, null, bearer, null)

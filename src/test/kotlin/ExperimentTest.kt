@@ -343,14 +343,14 @@ class ExperimentTest {
       client.post("/api/events/ingest") {
         header("X-API-Key", apiKey)
         contentType(ContentType.Application.Json)
-        setBody("""{"eventType":"Button.Shown","userId":"user$i","properties":{"color":"red"}}""")
+        setBody("""{"events":[{"eventType":"Button.Shown","userId":"user$i","properties":{"color":"red"}}]}""")
       }
     }
     repeat(2) { i ->
       client.post("/api/events/ingest") {
         header("X-API-Key", apiKey)
         contentType(ContentType.Application.Json)
-        setBody("""{"eventType":"Button.Clicked","userId":"user$i"}""")
+        setBody("""{"events":[{"eventType":"Button.Clicked","userId":"user$i"}]}""")
       }
     }
 

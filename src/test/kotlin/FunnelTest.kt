@@ -81,7 +81,7 @@ class FunnelTest {
     client.post("/api/events/ingest") {
       header("X-API-Key", apiKey)
       contentType(ContentType.Application.Json)
-      setBody("""{"eventType":"$eventType","userId":"$userId","occurredAt":"$occurredAt"}""")
+      setBody("""{"events":[{"eventType":"$eventType","userId":"$userId","occurredAt":"$occurredAt"}]}""")
     }
   }
 

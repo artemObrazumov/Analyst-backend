@@ -27,22 +27,44 @@ class EventTest {
       setBody("""{"name":"Test Project"}""")
     }
     val projectBody = Json.parseToJsonElement(projectRes.bodyAsText()).jsonObject
-    val projectId = projectBody["project"]!!.jsonObject["id"]!!.jsonPrimitive.content
     val apiKey = projectBody["apiKey"]!!.jsonObject["key"]!!.jsonPrimitive.content
 
     return Pair(token, apiKey)
   }
 
   @Test
-  fun `ingest with valid API key returns 202`() = testApplication {
+  fun `ingest batch with valid API key returns 200`() = testApplication {
     configure()
     val (_, apiKey) = registerWithProject()
     val response = client.post("/api/events/ingest") {
       header("X-API-Key", apiKey)
       contentType(ContentType.Application.Json)
-      setBody("""{"eventType":"button_click","platform":"ios","appVersion":"1.0"}""")
+      setBody(
+        """
+        {
+          "events": [
+            {"eventType":"button_click","platform":"ios","appVersion":"1.0"},
+            {"eventType":"screen_view","platform":"ios"}
+          ]
+        }
+        """.trimIndent()
+      )
     }
-    assertEquals(HttpStatusCode.Accepted, response.status)
+    assertEquals(HttpStatusCode.OK, response.status)
+    assertEquals(2, Json.parseToJsonElement(response.bodyAsText()).jsonObject["accepted"]!!.jsonPrimitive.content.toInt())
+  }
+
+  @Test
+  fun `ingest empty batch returns 200 with zero accepted`() = testApplication {
+    configure()
+    val (_, apiKey) = registerWithProject()
+    val response = client.post("/api/events/ingest") {
+      header("X-API-Key", apiKey)
+      contentType(ContentType.Application.Json)
+      setBody("""{"events":[]}""")
+    }
+    assertEquals(HttpStatusCode.OK, response.status)
+    assertEquals(0, Json.parseToJsonElement(response.bodyAsText()).jsonObject["accepted"]!!.jsonPrimitive.content.toInt())
   }
 
   @Test
@@ -51,7 +73,7 @@ class EventTest {
     val response = client.post("/api/events/ingest") {
       header("X-API-Key", "proj_invalid_key")
       contentType(ContentType.Application.Json)
-      setBody("""{"eventType":"button_click"}""")
+      setBody("""{"events":[{"eventType":"button_click"}]}""")
     }
     assertEquals(HttpStatusCode.Unauthorized, response.status)
   }
@@ -61,7 +83,7 @@ class EventTest {
     configure()
     val response = client.post("/api/events/ingest") {
       contentType(ContentType.Application.Json)
-      setBody("""{"eventType":"button_click"}""")
+      setBody("""{"events":[{"eventType":"button_click"}]}""")
     }
     assertEquals(HttpStatusCode.Unauthorized, response.status)
   }
