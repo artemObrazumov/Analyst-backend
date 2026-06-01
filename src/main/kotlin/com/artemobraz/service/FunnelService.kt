@@ -66,14 +66,14 @@ class FunnelService(
     projectId: UUID,
     funnelId: UUID,
     eventType: String,
-    label: String
+    propertyFilters: Map<String, String>
   ): FunnelStepResponse {
     assertProjectAccess(userId, projectId)
     assertFunnelBelongsToProject(funnelId, projectId)
     if (eventType.isBlank()) throw IllegalArgumentException("Event type is required")
-    if (label.isBlank()) throw IllegalArgumentException("Step label is required")
+    validatePropertyFilters(propertyFilters)
     val nextOrder = funnelRepository.nextStepOrder(funnelId)
-    return funnelRepository.addStep(funnelId, eventType, label, nextOrder).toStepResponse()
+    return funnelRepository.addStep(funnelId, eventType, propertyFilters, nextOrder).toStepResponse()
   }
 
   suspend fun removeStep(userId: UUID, projectId: UUID, funnelId: UUID, stepId: UUID) {
@@ -117,18 +117,24 @@ class FunnelService(
       )
     }
 
-    val eventTypes = steps.map { it.eventType }.distinct()
-    val occurrences = eventRepository.findFirstOccurrencesByUserAndType(projectId, eventTypes, from, to)
-    val byUser = occurrences.groupBy { it.userId }
-
     val stepCounts = LongArray(steps.size)
     val transitionSeconds = Array(steps.size - 1) { mutableListOf<Double>() }
 
-    for (userOccurrences in byUser.values) {
-      val firstAtByType = userOccurrences.associate { it.eventType to it.firstOccurredAt }
+    val occurrencesByStep = steps.map { step ->
+      eventRepository.findFirstOccurrencesByUserAndType(
+        projectId,
+        step.eventType,
+        step.propertyFilters,
+        from,
+        to
+      ).associateBy { it.userId }
+    }
+
+    val allUserIds = occurrencesByStep.flatMap { it.keys }.toSet()
+    for (userId in allUserIds) {
       var previousTime: Instant? = null
       for (i in steps.indices) {
-        val stepTime = firstAtByType[steps[i].eventType] ?: break
+        val stepTime = occurrencesByStep[i][userId]?.firstOccurredAt ?: break
         if (previousTime != null && stepTime <= previousTime) break
         stepCounts[i]++
         if (i > 0 && previousTime != null) {
@@ -157,7 +163,7 @@ class FunnelService(
       FunnelStepAnalysis(
         stepId = step.id.toString(),
         eventType = step.eventType,
-        label = step.label,
+        propertyFilters = step.propertyFilters,
         stepOrder = step.stepOrder,
         usersCount = usersCount,
         conversionFromPrevious = conversionFromPrevious,
@@ -179,6 +185,13 @@ class FunnelService(
       steps = stepAnalyses,
       overallConversion = overallConversion
     )
+  }
+
+  private fun validatePropertyFilters(propertyFilters: Map<String, String>) {
+    propertyFilters.forEach { (key, value) ->
+      if (key.isBlank()) throw IllegalArgumentException("Property filter key cannot be blank")
+      if (value.isBlank()) throw IllegalArgumentException("Property filter value cannot be blank")
+    }
   }
 
   private fun percent(part: Long, total: Long): Double =
@@ -214,7 +227,7 @@ class FunnelService(
   private fun FunnelStepRow.toStepResponse() = FunnelStepResponse(
     id = id.toString(),
     eventType = eventType,
-    label = label,
+    propertyFilters = propertyFilters,
     stepOrder = stepOrder
   )
 }

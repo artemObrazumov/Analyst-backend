@@ -1,7 +1,7 @@
-import com.artemobraz.model.DashboardChartResponse
 import com.artemobraz.model.DashboardDetailResponse
 import com.artemobraz.model.DashboardPageResponse
 import com.artemobraz.model.DashboardResponse
+import com.artemobraz.model.DashboardSeriesResponse
 import io.ktor.client.request.*
 import io.ktor.client.statement.*
 import io.ktor.http.*
@@ -110,7 +110,7 @@ class DashboardTest {
         parameter("to", to)
       }
       val body = json.decodeFromString<DashboardPageResponse>(response.bodyAsText())
-      val total = body.charts.firstOrNull()?.data?.sumOf { it.count } ?: 0L
+      val total = body.series.firstOrNull()?.data?.sumOf { it.count } ?: 0L
       if (total == expectedTotal) return
       delay(50)
     }
@@ -120,7 +120,7 @@ class DashboardTest {
       parameter("to", to)
     }
     val body = json.decodeFromString<DashboardPageResponse>(response.bodyAsText())
-    val total = body.charts.firstOrNull()?.data?.sumOf { it.count } ?: 0L
+    val total = body.series.firstOrNull()?.data?.sumOf { it.count } ?: 0L
     assertEquals(expectedTotal, total, "async event ingest did not finish in time")
   }
 
@@ -154,22 +154,22 @@ class DashboardTest {
   }
 
   @Test
-  fun `get dashboard returns detail with charts config`() = testApplication {
+  fun `get dashboard returns detail with series config`() = testApplication {
     configure()
     val (token, projectId) = registerWithProject()
     val dashboardId = createDashboard(token, projectId)
 
-    client.post("/api/projects/$projectId/dashboards/$dashboardId/charts") {
+    client.post("/api/projects/$projectId/dashboards/$dashboardId/series") {
       contentType(ContentType.Application.Json)
       bearerAuth(token)
-      setBody("""{"title":"Clicks","chartType":"line","eventType":"button_click"}""")
+      setBody("""{"label":"Clicks","eventType":"button_click"}""")
     }
 
     val response = client.get("/api/projects/$projectId/dashboards/$dashboardId") { bearerAuth(token) }
     assertEquals(HttpStatusCode.OK, response.status)
     val body = json.decodeFromString<DashboardDetailResponse>(response.bodyAsText())
-    assertEquals(1, body.charts.size)
-    assertEquals("button_click", body.charts[0].eventType)
+    assertEquals(1, body.series.size)
+    assertEquals("button_click", body.series[0].eventType)
   }
 
   @Test
@@ -193,7 +193,7 @@ class DashboardTest {
   }
 
   @Test
-  fun `page returns name and chart data for period`() = testApplication {
+  fun `page returns name and series data for period`() = testApplication {
     configure()
     val (token, projectId, apiKey) = registerWithProjectAndKey()
     val dashboardId = createDashboard(token, projectId, "Analytics Page")
@@ -201,10 +201,10 @@ class DashboardTest {
     val from = "2026-05-20T00:00:00Z"
     val to = "2026-05-21T23:59:59Z"
 
-    client.post("/api/projects/$projectId/dashboards/$dashboardId/charts") {
+    client.post("/api/projects/$projectId/dashboards/$dashboardId/series") {
       contentType(ContentType.Application.Json)
       bearerAuth(token)
-      setBody("""{"title":"Views","chartType":"bar","eventType":"$eventType"}""")
+      setBody("""{"label":"Views","eventType":"$eventType"}""")
     }
 
     repeat(3) {
@@ -222,13 +222,12 @@ class DashboardTest {
     assertEquals(HttpStatusCode.OK, response.status)
     val body = json.decodeFromString<DashboardPageResponse>(response.bodyAsText())
     assertEquals("Analytics Page", body.name)
-    assertEquals(1, body.charts.size)
-    assertEquals("Views", body.charts[0].title)
-    assertEquals("bar", body.charts[0].chartType)
-    assertEquals(4L, body.charts[0].data.sumOf { it.count })
-    assertEquals(2, body.charts[0].data.size)
-    assertTrue(body.charts[0].data.any { it.date == "2026-05-20" && it.count == 3L })
-    assertTrue(body.charts[0].data.any { it.date == "2026-05-21" && it.count == 1L })
+    assertEquals(1, body.series.size)
+    assertEquals("Views", body.series[0].label)
+    assertEquals(4L, body.series[0].data.sumOf { it.count })
+    assertEquals(2, body.series[0].data.size)
+    assertTrue(body.series[0].data.any { it.date == "2026-05-20" && it.count == 3L })
+    assertTrue(body.series[0].data.any { it.date == "2026-05-21" && it.count == 1L })
   }
 
   @Test
@@ -240,10 +239,10 @@ class DashboardTest {
     val from = "2026-05-20T00:00:00Z"
     val to = "2026-05-22T23:59:59Z"
 
-    client.post("/api/projects/$projectId/dashboards/$dashboardId/charts") {
+    client.post("/api/projects/$projectId/dashboards/$dashboardId/series") {
       contentType(ContentType.Application.Json)
       bearerAuth(token)
-      setBody("""{"title":"Sparse","eventType":"$eventType"}""")
+      setBody("""{"label":"Sparse","eventType":"$eventType"}""")
     }
 
     ingestEvent(apiKey, eventType, "2026-05-21T12:00:00Z")
@@ -258,7 +257,7 @@ class DashboardTest {
       }.bodyAsText()
     )
 
-    val data = body.charts.single().data
+    val data = body.series.single().data
     assertEquals(3, data.size)
     assertEquals(0L, data.first { it.date == "2026-05-20" }.count)
     assertEquals(1L, data.first { it.date == "2026-05-21" }.count)
@@ -273,10 +272,10 @@ class DashboardTest {
     val from = "2026-07-01T00:00:00Z"
     val to = "2026-07-02T23:59:59Z"
 
-    client.post("/api/projects/$projectId/dashboards/$dashboardId/charts") {
+    client.post("/api/projects/$projectId/dashboards/$dashboardId/series") {
       contentType(ContentType.Application.Json)
       bearerAuth(token)
-      setBody("""{"title":"Empty","eventType":"no_events_${System.currentTimeMillis()}"}""")
+      setBody("""{"label":"Empty","eventType":"no_events_${System.currentTimeMillis()}"}""")
     }
 
     val body = json.decodeFromString<DashboardPageResponse>(
@@ -287,66 +286,66 @@ class DashboardTest {
       }.bodyAsText()
     )
 
-    val data = body.charts.single().data
+    val data = body.series.single().data
     assertEquals(2, data.size)
     assertTrue(data.all { it.count == 0L })
   }
 
   @Test
-  fun `update chart succeeds`() = testApplication {
+  fun `update series succeeds`() = testApplication {
     configure()
     val (token, projectId) = registerWithProject()
     val dashboardId = createDashboard(token, projectId)
 
-    val addResponse = client.post("/api/projects/$projectId/dashboards/$dashboardId/charts") {
+    val addResponse = client.post("/api/projects/$projectId/dashboards/$dashboardId/series") {
       contentType(ContentType.Application.Json)
       bearerAuth(token)
-      setBody("""{"title":"Old","chartType":"line","eventType":"click"}""")
+      setBody("""{"label":"Old","eventType":"click"}""")
     }
-    val chart = json.decodeFromString<DashboardChartResponse>(addResponse.bodyAsText())
+    val series = json.decodeFromString<DashboardSeriesResponse>(addResponse.bodyAsText())
 
-    val updateResponse = client.put("/api/projects/$projectId/dashboards/$dashboardId/charts/${chart.id}") {
+    val updateResponse = client.put("/api/projects/$projectId/dashboards/$dashboardId/series/${series.id}") {
       contentType(ContentType.Application.Json)
       bearerAuth(token)
       setBody(
         """
         {
-          "title":"New title",
-          "chartType":"bar",
+          "label":"New label",
+          "period":"30d",
           "eventType":"purchase",
-          "filters":{"platform":"ios"}
+          "platform":"ios"
         }
         """.trimIndent()
       )
     }
     assertEquals(HttpStatusCode.OK, updateResponse.status)
-    val updated = json.decodeFromString<DashboardChartResponse>(updateResponse.bodyAsText())
-    assertEquals("New title", updated.title)
-    assertEquals("bar", updated.chartType)
+    val updated = json.decodeFromString<DashboardSeriesResponse>(updateResponse.bodyAsText())
+    assertEquals("New label", updated.label)
+    assertEquals("30d", updated.period)
     assertEquals("purchase", updated.eventType)
-    assertEquals("ios", updated.filters.platform)
+    assertEquals("ios", updated.platform)
 
     val detail = json.decodeFromString<DashboardDetailResponse>(
       client.get("/api/projects/$projectId/dashboards/$dashboardId") { bearerAuth(token) }.bodyAsText()
     )
-    assertEquals("New title", detail.charts.single().title)
+    assertEquals("New label", detail.series.single().label)
   }
 
   @Test
-  fun `add and remove chart succeeds`() = testApplication {
+  fun `add and remove series succeeds`() = testApplication {
     configure()
     val (token, projectId) = registerWithProject()
     val dashboardId = createDashboard(token, projectId)
 
-    val addResponse = client.post("/api/projects/$projectId/dashboards/$dashboardId/charts") {
+    val addResponse = client.post("/api/projects/$projectId/dashboards/$dashboardId/series") {
       contentType(ContentType.Application.Json)
       bearerAuth(token)
-      setBody("""{"title":"Signups","eventType":"signup"}""")
+      setBody("""{"label":"Signups","eventType":"signup"}""")
     }
     assertEquals(HttpStatusCode.Created, addResponse.status)
-    val chart = json.decodeFromString<DashboardChartResponse>(addResponse.bodyAsText())
+    val series = json.decodeFromString<DashboardSeriesResponse>(addResponse.bodyAsText())
 
-    val deleteResponse = client.delete("/api/projects/$projectId/dashboards/$dashboardId/charts/${chart.id}") {
+    val deleteResponse = client.delete("/api/projects/$projectId/dashboards/$dashboardId/series/${series.id}") {
       bearerAuth(token)
     }
     assertEquals(HttpStatusCode.NoContent, deleteResponse.status)
@@ -369,32 +368,33 @@ class DashboardTest {
   }
 
   @Test
-  fun `add chart with filters returns filters in response`() = testApplication {
+  fun `add series with filters returns filters in response`() = testApplication {
     configure()
     val (token, projectId) = registerWithProject()
     val dashboardId = createDashboard(token, projectId)
 
-    val response = client.post("/api/projects/$projectId/dashboards/$dashboardId/charts") {
+    val response = client.post("/api/projects/$projectId/dashboards/$dashboardId/series") {
       contentType(ContentType.Application.Json)
       bearerAuth(token)
       setBody(
         """
         {
-          "title":"iOS clicks",
+          "label":"iOS clicks",
           "eventType":"button_click",
-          "filters":{"platform":"ios","country":"US"}
+          "platform":"ios",
+          "country":"US"
         }
         """.trimIndent()
       )
     }
     assertEquals(HttpStatusCode.Created, response.status)
-    val chart = json.decodeFromString<DashboardChartResponse>(response.bodyAsText())
-    assertEquals("ios", chart.filters.platform)
-    assertEquals("US", chart.filters.country)
+    val series = json.decodeFromString<DashboardSeriesResponse>(response.bodyAsText())
+    assertEquals("ios", series.platform)
+    assertEquals("US", series.country)
   }
 
   @Test
-  fun `page applies platform filter to chart data`() = testApplication {
+  fun `page applies platform filter to series data`() = testApplication {
     configure()
     val (token, projectId, apiKey) = registerWithProjectAndKey()
     val dashboardId = createDashboard(token, projectId)
@@ -402,15 +402,15 @@ class DashboardTest {
     val from = "2026-06-01T00:00:00Z"
     val to = "2026-06-02T23:59:59Z"
 
-    client.post("/api/projects/$projectId/dashboards/$dashboardId/charts") {
+    client.post("/api/projects/$projectId/dashboards/$dashboardId/series") {
       contentType(ContentType.Application.Json)
       bearerAuth(token)
       setBody(
         """
         {
-          "title":"iOS only",
+          "label":"iOS only",
           "eventType":"$eventType",
-          "filters":{"platform":"ios"}
+          "platform":"ios"
         }
         """.trimIndent()
       )
@@ -438,12 +438,12 @@ class DashboardTest {
         parameter("to", to)
       }.bodyAsText()
     )
-    assertEquals("ios", body.charts[0].filters.platform)
-    assertEquals(2L, body.charts[0].data.sumOf { it.count })
+    assertEquals("ios", body.series[0].platform)
+    assertEquals(2L, body.series[0].data.sumOf { it.count })
   }
 
   @Test
-  fun `page applies country and properties filters`() = testApplication {
+  fun `page applies country and property filters`() = testApplication {
     configure()
     val (token, projectId, apiKey) = registerWithProjectAndKey()
     val dashboardId = createDashboard(token, projectId)
@@ -451,15 +451,16 @@ class DashboardTest {
     val from = "2026-06-10T00:00:00Z"
     val to = "2026-06-11T23:59:59Z"
 
-    client.post("/api/projects/$projectId/dashboards/$dashboardId/charts") {
+    client.post("/api/projects/$projectId/dashboards/$dashboardId/series") {
       contentType(ContentType.Application.Json)
       bearerAuth(token)
       setBody(
         """
         {
-          "title":"US premium",
+          "label":"US premium",
           "eventType":"$eventType",
-          "filters":{"country":"US","properties":{"plan":"premium"}}
+          "country":"US",
+          "propertyFilters":{"plan":"premium"}
         }
         """.trimIndent()
       )
@@ -503,15 +504,15 @@ class DashboardTest {
   }
 
   @Test
-  fun `add chart with invalid country returns 400`() = testApplication {
+  fun `add series with invalid country returns 400`() = testApplication {
     configure()
     val (token, projectId) = registerWithProject()
     val dashboardId = createDashboard(token, projectId)
 
-    val response = client.post("/api/projects/$projectId/dashboards/$dashboardId/charts") {
+    val response = client.post("/api/projects/$projectId/dashboards/$dashboardId/series") {
       contentType(ContentType.Application.Json)
       bearerAuth(token)
-      setBody("""{"title":"Bad","eventType":"x","filters":{"country":"USA"}}""")
+      setBody("""{"label":"Bad","eventType":"x","country":"USA"}""")
     }
     assertEquals(HttpStatusCode.BadRequest, response.status)
   }

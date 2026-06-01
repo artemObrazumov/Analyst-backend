@@ -3,17 +3,6 @@ package com.artemobraz.model
 import kotlinx.serialization.Serializable
 
 @Serializable
-data class ChartFilters(
-  val platform: String? = null,
-  val country: String? = null,
-  val deviceId: String? = null,
-  val userId: String? = null,
-  val appVersion: String? = null,
-  val osVersion: String? = null,
-  val properties: Map<String, String> = emptyMap()
-)
-
-@Serializable
 data class CreateDashboardRequest(
   val name: String,
   val description: String? = null
@@ -29,54 +18,60 @@ data class UpdateDashboardRequest(
 data class DashboardResponse(
   val id: String,
   val projectId: String,
-  val createdBy: String,
   val name: String,
-  val description: String?,
-  val createdAt: String,
-  val updatedAt: String
+  val description: String?
 )
 
 @Serializable
 data class DashboardDetailResponse(
   val id: String,
   val projectId: String,
-  val createdBy: String,
   val name: String,
   val description: String?,
-  val createdAt: String,
-  val updatedAt: String,
-  val charts: List<DashboardChartResponse>
+  val series: List<DashboardSeriesResponse>
 )
 
 @Serializable
-data class DashboardChartResponse(
+data class DashboardSeriesResponse(
   val id: String,
-  val title: String,
-  val chartType: String,
+  val label: String,
+  val period: String,
   val eventType: String,
-  val chartOrder: Int,
-  val filters: ChartFilters = ChartFilters()
+  val platform: String? = null,
+  val osVersion: String? = null,
+  val appVersion: String? = null,
+  val country: String? = null,
+  val propertyFilters: Map<String, String> = emptyMap(),
+  val position: Int
 )
 
 @Serializable
-data class AddDashboardChartRequest(
-  val title: String,
-  val chartType: String = "line",
+data class AddDashboardSeriesRequest(
+  val label: String,
+  val period: String = "7d",
   val eventType: String,
-  val filters: ChartFilters = ChartFilters()
+  val platform: String? = null,
+  val osVersion: String? = null,
+  val appVersion: String? = null,
+  val country: String? = null,
+  val propertyFilters: Map<String, String> = emptyMap()
 )
 
 @Serializable
-data class UpdateDashboardChartRequest(
-  val title: String,
-  val chartType: String = "line",
+data class UpdateDashboardSeriesRequest(
+  val label: String,
+  val period: String,
   val eventType: String,
-  val filters: ChartFilters = ChartFilters()
+  val platform: String? = null,
+  val osVersion: String? = null,
+  val appVersion: String? = null,
+  val country: String? = null,
+  val propertyFilters: Map<String, String> = emptyMap()
 )
 
 @Serializable
-data class ReorderDashboardChartsRequest(
-  val chartIds: List<String>
+data class ReorderDashboardSeriesRequest(
+  val seriesIds: List<String>
 )
 
 @Serializable
@@ -86,20 +81,24 @@ data class DashboardPagePeriod(
 )
 
 @Serializable
-data class ChartDataPoint(
+data class SeriesDataPoint(
   val date: String,
   val count: Long
 )
 
 @Serializable
-data class DashboardChartWithData(
+data class DashboardSeriesWithData(
   val id: String,
-  val title: String,
-  val chartType: String,
+  val label: String,
+  val period: String,
   val eventType: String,
-  val chartOrder: Int,
-  val filters: ChartFilters = ChartFilters(),
-  val data: List<ChartDataPoint>
+  val platform: String? = null,
+  val osVersion: String? = null,
+  val appVersion: String? = null,
+  val country: String? = null,
+  val propertyFilters: Map<String, String> = emptyMap(),
+  val position: Int,
+  val data: List<SeriesDataPoint>
 )
 
 @Serializable
@@ -108,5 +107,5 @@ data class DashboardPageResponse(
   val name: String,
   val description: String?,
   val period: DashboardPagePeriod,
-  val charts: List<DashboardChartWithData>
+  val series: List<DashboardSeriesWithData>
 )

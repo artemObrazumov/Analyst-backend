@@ -327,11 +327,10 @@ object CheckoutSeedRunner {
       CheckoutEventTypes.PAYMENT_VIEWED to CheckoutSeedConfig.FUNNEL_STEP_PAYMENT,
       CheckoutEventTypes.CONFIRMATION_VIEWED to CheckoutSeedConfig.FUNNEL_STEP_CONFIRMATION,
       CheckoutEventTypes.COMPLETED to CheckoutSeedConfig.FUNNEL_STEP_COMPLETED,
-    ).forEach { (eventType, label) ->
+    ).forEach { (eventType, _) ->
       val body = """
         {
-          "eventType": "$eventType",
-          "label": ${jsonEscape(label)}
+          "eventType": "$eventType"
         }
       """.trimIndent()
       val r = post("/api/projects/$projectId/funnels/$funnelId/steps", body, bearer = token)
@@ -340,59 +339,59 @@ object CheckoutSeedRunner {
     println("Создана воронка: ${CheckoutSeedConfig.FUNNEL_NAME} ($funnelId)")
   }
 
-  private data class ChartSpec(val title: String, val eventType: String, val platform: String)
+  private data class SeriesSpec(val label: String, val eventType: String, val platform: String)
 
-  private fun errorChartSpecs(): List<ChartSpec> = listOf(
-    ChartSpec(
+  private fun errorSeriesSpecs(): List<SeriesSpec> = listOf(
+    SeriesSpec(
       CheckoutSeedConfig.CHART_PAGE_LOAD_ERRORS_IOS,
       CheckoutEventTypes.PAGE_LOAD_ERROR,
       CheckoutSeedConfig.PLATFORM_IOS
     ),
-    ChartSpec(
+    SeriesSpec(
       CheckoutSeedConfig.CHART_PAGE_LOAD_ERRORS_ANDROID,
       CheckoutEventTypes.PAGE_LOAD_ERROR,
       CheckoutSeedConfig.PLATFORM_ANDROID
     ),
-    ChartSpec(
+    SeriesSpec(
       CheckoutSeedConfig.CHART_PAYMENT_ERRORS_IOS,
       CheckoutEventTypes.PAYMENT_ERROR,
       CheckoutSeedConfig.PLATFORM_IOS
     ),
-    ChartSpec(
+    SeriesSpec(
       CheckoutSeedConfig.CHART_PAYMENT_ERRORS_ANDROID,
       CheckoutEventTypes.PAYMENT_ERROR,
       CheckoutSeedConfig.PLATFORM_ANDROID
     ),
   )
 
-  private fun findDashboardChartTitles(token: String, projectId: String, dashboardId: String): Set<String> {
+  private fun findDashboardSeriesLabels(token: String, projectId: String, dashboardId: String): Set<String> {
     val response = get("/api/projects/$projectId/dashboards/$dashboardId", bearer = token)
     require(response.statusCode() == 200) {
       "Get dashboard failed: ${response.statusCode()} ${response.body()}"
     }
-    return json.parseToJsonElement(response.body()).jsonObject["charts"]!!.jsonArray
-      .mapNotNull { it.jsonObject["title"]?.jsonPrimitive?.content }
+    return json.parseToJsonElement(response.body()).jsonObject["series"]!!.jsonArray
+      .mapNotNull { it.jsonObject["label"]?.jsonPrimitive?.content }
       .toSet()
   }
 
-  private fun addChart(token: String, projectId: String, dashboardId: String, spec: ChartSpec) {
+  private fun addSeries(token: String, projectId: String, dashboardId: String, spec: SeriesSpec) {
     val body = """
       {
-        "title": ${jsonEscape(spec.title)},
+        "label": ${jsonEscape(spec.label)},
         "eventType": "${spec.eventType}",
-        "filters": { "platform": "${spec.platform}" }
+        "platform": "${spec.platform}"
       }
     """.trimIndent()
-    val r = post("/api/projects/$projectId/dashboards/$dashboardId/charts", body, bearer = token)
-    require(r.statusCode() == 201) { "Add chart '${spec.title}' failed: ${r.body()}" }
+    val r = post("/api/projects/$projectId/dashboards/$dashboardId/series", body, bearer = token)
+    require(r.statusCode() == 201) { "Add series '${spec.label}' failed: ${r.body()}" }
   }
 
-  private fun ensureErrorCharts(token: String, projectId: String, dashboardId: String) {
-    val existing = findDashboardChartTitles(token, projectId, dashboardId)
+  private fun ensureErrorSeries(token: String, projectId: String, dashboardId: String) {
+    val existing = findDashboardSeriesLabels(token, projectId, dashboardId)
     var added = 0
-    errorChartSpecs().forEach { spec ->
-      if (spec.title !in existing) {
-        addChart(token, projectId, dashboardId, spec)
+    errorSeriesSpecs().forEach { spec ->
+      if (spec.label !in existing) {
+        addSeries(token, projectId, dashboardId, spec)
         added++
       }
     }
@@ -422,7 +421,7 @@ object CheckoutSeedRunner {
         json.parseToJsonElement(errorsDash.body()).jsonObject["id"]!!.jsonPrimitive.content
       }
 
-    ensureErrorCharts(token, projectId, errorsDashId)
+    ensureErrorSeries(token, projectId, errorsDashId)
 
     val successDashId = findResourceIdByName(token, listPath, CheckoutSeedConfig.DASHBOARD_SUCCESS_NAME)
     if (successDashId != null) {
@@ -443,12 +442,12 @@ object CheckoutSeedRunner {
 
       val body = """
         {
-          "title": ${jsonEscape(CheckoutSeedConfig.CHART_SUCCESSFUL_CHECKOUT)},
+          "label": ${jsonEscape(CheckoutSeedConfig.CHART_SUCCESSFUL_CHECKOUT)},
           "eventType": "${CheckoutEventTypes.COMPLETED}"
         }
       """.trimIndent()
-      val chart = post("/api/projects/$projectId/dashboards/$dashId/charts", body, bearer = token)
-      require(chart.statusCode() == 201) { "Add success chart failed: ${chart.body()}" }
+      val series = post("/api/projects/$projectId/dashboards/$dashId/series", body, bearer = token)
+      require(series.statusCode() == 201) { "Add success series failed: ${series.body()}" }
       println("Создан дэшборд: ${CheckoutSeedConfig.DASHBOARD_SUCCESS_NAME} ($dashId)")
     }
   }

@@ -1,8 +1,8 @@
 package com.artemobraz.repository
 
-import com.artemobraz.model.ChartFilters
 import com.artemobraz.model.EventRow
 import com.artemobraz.model.Events
+import com.artemobraz.model.SeriesFilters
 import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
 import kotlinx.serialization.json.Json
@@ -16,7 +16,8 @@ import java.util.*
 data class UserEventFirstOccurrence(
   val userId: String,
   val eventType: String,
-  val firstOccurredAt: Instant
+  val firstOccurredAt: Instant,
+  val properties: String
 )
 
 data class EventCountByDay(
@@ -25,7 +26,8 @@ data class EventCountByDay(
 )
 
 private const val FIRST_OCCURRENCES_SQL = """
-    SELECT user_id, event_type, MIN(occurred_at) AS first_at
+    SELECT DISTINCT ON (user_id, event_type)
+           user_id, event_type, occurred_at AS first_at, properties::text AS properties
     FROM events
     WHERE project_id = CAST(? AS uuid)
       AND user_id IS NOT NULL
@@ -83,6 +85,61 @@ class EventRepository {
 
   suspend fun findFirstOccurrencesByUserAndType(
     projectId: UUID,
+    eventType: String,
+    propertyFilters: Map<String, String> = emptyMap(),
+    from: Instant? = null,
+    to: Instant? = null
+  ): List<UserEventFirstOccurrence> {
+    val sql = buildString {
+      append(
+        """
+        SELECT DISTINCT ON (user_id)
+               user_id, event_type, occurred_at AS first_at, properties::text AS properties
+        FROM events
+        WHERE project_id = CAST(? AS uuid)
+          AND user_id IS NOT NULL
+          AND event_type = ?
+        """.trimIndent()
+      )
+      if (propertyFilters.isNotEmpty()) append("\n  AND properties @> CAST(? AS jsonb)")
+      if (from != null) append("\n  AND occurred_at >= CAST(? AS timestamptz)")
+      if (to != null) append("\n  AND occurred_at <= CAST(? AS timestamptz)")
+      append("\nORDER BY user_id, occurred_at ASC")
+    }
+    val propertiesJson = if (propertyFilters.isNotEmpty()) {
+      Json.encodeToString(
+        buildJsonObject { propertyFilters.forEach { (key, value) -> put(key, value) } }
+      )
+    } else null
+    val params = buildList {
+      add(TextColumnType() to projectId.toString())
+      add(TextColumnType() to eventType)
+      if (propertiesJson != null) add(TextColumnType() to propertiesJson)
+      if (from != null) add(TextColumnType() to from.toString())
+      if (to != null) add(TextColumnType() to to.toString())
+    }
+    return newSuspendedTransaction {
+      exec(sql, params, explicitStatementType = StatementType.SELECT) { rs ->
+        val result = mutableListOf<UserEventFirstOccurrence>()
+        while (rs.next()) {
+          result.add(
+            UserEventFirstOccurrence(
+              userId = rs.getString("user_id"),
+              eventType = rs.getString("event_type"),
+              firstOccurredAt = rs.getTimestamp("first_at")!!.time.let {
+                Instant.fromEpochMilliseconds(it)
+              },
+              properties = rs.getString("properties")
+            )
+          )
+        }
+        result
+      } ?: emptyList()
+    }
+  }
+
+  suspend fun findFirstOccurrencesByUserAndType(
+    projectId: UUID,
     eventTypes: List<String>,
     from: Instant? = null,
     to: Instant? = null
@@ -94,7 +151,7 @@ class EventRepository {
       append(FIRST_OCCURRENCES_SQL.trim())
       if (from != null) append("\n      AND occurred_at >= CAST(? AS timestamptz)")
       if (to != null) append("\n      AND occurred_at <= CAST(? AS timestamptz)")
-      append("\n    GROUP BY user_id, event_type")
+      append("\n    ORDER BY user_id, event_type, occurred_at ASC")
     }
     val params = buildList {
       add(TextColumnType() to projectId.toString())
@@ -116,7 +173,8 @@ class EventRepository {
               eventType = rs.getString("event_type"),
               firstOccurredAt = rs.getTimestamp("first_at")!!.time.let {
                 Instant.fromEpochMilliseconds(it)
-              }
+              },
+              properties = rs.getString("properties")
             )
           )
         }
@@ -128,9 +186,57 @@ class EventRepository {
   suspend fun countEventsByDay(
     projectId: UUID,
     eventType: String,
-    filters: ChartFilters = ChartFilters(),
+    filters: SeriesFilters = SeriesFilters(),
     from: Instant? = null,
     to: Instant? = null
+  ): List<EventCountByDay> {
+    if (filters.hasDimensionFilters()) {
+      return countEventsByDayFromRawEvents(projectId, eventType, filters, from, to)
+    }
+    return countEventsByDayFromHourly(projectId, eventType, from, to)
+  }
+
+  private fun SeriesFilters.hasDimensionFilters(): Boolean =
+    platform != null ||
+      country != null ||
+      osVersion != null ||
+      appVersion != null ||
+      propertyFilters.isNotEmpty()
+
+  private suspend fun countEventsByDayFromHourly(
+    projectId: UUID,
+    eventType: String,
+    from: Instant?,
+    to: Instant?
+  ): List<EventCountByDay> {
+    val sql = buildString {
+      append(
+        """
+        SELECT DATE_TRUNC('day', bucket_time AT TIME ZONE 'UTC')::date AS bucket, SUM(count) AS cnt
+        FROM events_hourly
+        WHERE project_id = CAST(? AS uuid)
+          AND event_type = ?
+        """.trimIndent()
+      )
+      if (from != null) append("\n  AND bucket_time >= CAST(? AS timestamptz)")
+      if (to != null) append("\n  AND bucket_time <= CAST(? AS timestamptz)")
+      append("\nGROUP BY bucket\nORDER BY bucket")
+    }
+    val params = buildList {
+      add(TextColumnType() to projectId.toString())
+      add(TextColumnType() to eventType)
+      if (from != null) add(TextColumnType() to from.toString())
+      if (to != null) add(TextColumnType() to to.toString())
+    }
+    return execCountByDay(sql, params)
+  }
+
+  private suspend fun countEventsByDayFromRawEvents(
+    projectId: UUID,
+    eventType: String,
+    filters: SeriesFilters,
+    from: Instant?,
+    to: Instant?
   ): List<EventCountByDay> {
     val sql = buildString {
       append(
@@ -143,18 +249,16 @@ class EventRepository {
       )
       if (filters.platform != null) append("\n  AND platform = ?")
       if (filters.country != null) append("\n  AND country = ?")
-      if (filters.deviceId != null) append("\n  AND device_id = ?")
-      if (filters.userId != null) append("\n  AND user_id = ?")
       if (filters.appVersion != null) append("\n  AND app_version = ?")
       if (filters.osVersion != null) append("\n  AND os_version = ?")
-      if (filters.properties.isNotEmpty()) append("\n  AND properties @> CAST(? AS jsonb)")
+      if (filters.propertyFilters.isNotEmpty()) append("\n  AND properties @> CAST(? AS jsonb)")
       if (from != null) append("\n  AND occurred_at >= CAST(? AS timestamptz)")
       if (to != null) append("\n  AND occurred_at <= CAST(? AS timestamptz)")
       append("\nGROUP BY bucket\nORDER BY bucket")
     }
-    val propertiesJson = if (filters.properties.isNotEmpty()) {
+    val propertiesJson = if (filters.propertyFilters.isNotEmpty()) {
       Json.encodeToString(
-        buildJsonObject { filters.properties.forEach { (key, value) -> put(key, value) } }
+        buildJsonObject { filters.propertyFilters.forEach { (key, value) -> put(key, value) } }
       )
     } else null
     val params = buildList {
@@ -162,15 +266,17 @@ class EventRepository {
       add(TextColumnType() to eventType)
       if (filters.platform != null) add(TextColumnType() to filters.platform)
       if (filters.country != null) add(TextColumnType() to filters.country)
-      if (filters.deviceId != null) add(TextColumnType() to filters.deviceId)
-      if (filters.userId != null) add(TextColumnType() to filters.userId)
       if (filters.appVersion != null) add(TextColumnType() to filters.appVersion)
       if (filters.osVersion != null) add(TextColumnType() to filters.osVersion)
       if (propertiesJson != null) add(TextColumnType() to propertiesJson)
       if (from != null) add(TextColumnType() to from.toString())
       if (to != null) add(TextColumnType() to to.toString())
     }
-    return newSuspendedTransaction {
+    return execCountByDay(sql, params)
+  }
+
+  private suspend fun execCountByDay(sql: String, params: List<Pair<TextColumnType, String>>): List<EventCountByDay> =
+    newSuspendedTransaction {
       exec(sql, params, explicitStatementType = StatementType.SELECT) { rs ->
         val result = mutableListOf<EventCountByDay>()
         while (rs.next()) {
@@ -184,7 +290,6 @@ class EventRepository {
         result
       } ?: emptyList()
     }
-  }
 
     suspend fun findByProject(
         projectId: UUID,

@@ -63,16 +63,26 @@ fun Route.dashboardRoutes(dashboardService: DashboardService) {
           call.respond(dashboardService.getDashboardPage(userId, projectId, id, from, to))
         }
 
-        route("/charts") {
+        route("/series") {
           post {
             val userId = call.userId()
             val projectId = call.pathUUID("projectId")
             val dashboardId = call.pathUUID("id")
-            val body = call.receive<AddDashboardChartRequest>()
+            val body = call.receive<AddDashboardSeriesRequest>()
             call.respond(
               HttpStatusCode.Created,
-              dashboardService.addChart(
-                userId, projectId, dashboardId, body.title, body.chartType, body.eventType, body.filters
+              dashboardService.addSeries(
+                userId,
+                projectId,
+                dashboardId,
+                body.label,
+                body.period,
+                body.eventType,
+                body.platform,
+                body.osVersion,
+                body.appVersion,
+                body.country,
+                body.propertyFilters
               )
             )
           }
@@ -81,37 +91,41 @@ fun Route.dashboardRoutes(dashboardService: DashboardService) {
             val userId = call.userId()
             val projectId = call.pathUUID("projectId")
             val dashboardId = call.pathUUID("id")
-            val body = call.receive<ReorderDashboardChartsRequest>()
-            dashboardService.reorderCharts(userId, projectId, dashboardId, body.chartIds)
-            call.respond(HttpStatusCode.OK, mapOf("message" to "Charts reordered"))
+            val body = call.receive<ReorderDashboardSeriesRequest>()
+            dashboardService.reorderSeries(userId, projectId, dashboardId, body.seriesIds)
+            call.respond(HttpStatusCode.OK, mapOf("message" to "Series reordered"))
           }
 
-          put("/{chartId}") {
+          put("/{seriesId}") {
             val userId = call.userId()
             val projectId = call.pathUUID("projectId")
             val dashboardId = call.pathUUID("id")
-            val chartId = call.pathUUID("chartId")
-            val body = call.receive<UpdateDashboardChartRequest>()
+            val seriesId = call.pathUUID("seriesId")
+            val body = call.receive<UpdateDashboardSeriesRequest>()
             call.respond(
-              dashboardService.updateChart(
+              dashboardService.updateSeries(
                 userId,
                 projectId,
                 dashboardId,
-                chartId,
-                body.title,
-                body.chartType,
+                seriesId,
+                body.label,
+                body.period,
                 body.eventType,
-                body.filters
+                body.platform,
+                body.osVersion,
+                body.appVersion,
+                body.country,
+                body.propertyFilters
               )
             )
           }
 
-          delete("/{chartId}") {
+          delete("/{seriesId}") {
             val userId = call.userId()
             val projectId = call.pathUUID("projectId")
             val dashboardId = call.pathUUID("id")
-            val chartId = call.pathUUID("chartId")
-            dashboardService.removeChart(userId, projectId, dashboardId, chartId)
+            val seriesId = call.pathUUID("seriesId")
+            dashboardService.removeSeries(userId, projectId, dashboardId, seriesId)
             call.respond(HttpStatusCode.NoContent)
           }
         }

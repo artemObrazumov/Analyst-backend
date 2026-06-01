@@ -1,9 +1,6 @@
 package com.artemobraz.repository
 
-import com.artemobraz.model.FunnelRow
-import com.artemobraz.model.FunnelStepRow
-import com.artemobraz.model.FunnelSteps
-import com.artemobraz.model.Funnels
+import com.artemobraz.model.*
 import kotlinx.datetime.Clock
 import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
@@ -65,12 +62,17 @@ class FunnelRepository {
       ?.toStepRow()
   }
 
-  suspend fun addStep(funnelId: UUID, eventType: String, label: String, stepOrder: Int): FunnelStepRow =
+  suspend fun addStep(
+    funnelId: UUID,
+    eventType: String,
+    propertyFilters: Map<String, String>,
+    stepOrder: Int
+  ): FunnelStepRow =
     newSuspendedTransaction {
       val insertedId = FunnelSteps.insertAndGetId {
         it[FunnelSteps.funnelId] = funnelId
         it[FunnelSteps.eventType] = eventType
-        it[FunnelSteps.label] = label
+        it[FunnelSteps.propertyFilters] = propertyFilters.toPropertyFiltersJson()
         it[FunnelSteps.stepOrder] = stepOrder
       }
       FunnelSteps.selectAll().where { FunnelSteps.id eq insertedId }.first().toStepRow()
@@ -117,7 +119,7 @@ class FunnelRepository {
     id = this[FunnelSteps.id].value,
     funnelId = this[FunnelSteps.funnelId].value,
     eventType = this[FunnelSteps.eventType],
-    label = this[FunnelSteps.label],
+    propertyFilters = this[FunnelSteps.propertyFilters].toPropertyFilters(),
     stepOrder = this[FunnelSteps.stepOrder]
   )
 }

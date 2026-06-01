@@ -5,6 +5,7 @@ import com.artemobraz.model.EventDto
 import com.artemobraz.model.EventRow
 import com.artemobraz.model.IngestEventRequest
 import com.artemobraz.repository.EventRepository
+import com.artemobraz.repository.EventsHourlyRepository
 import com.artemobraz.repository.ProjectRepository
 import com.artemobraz.utils.sha256
 import kotlinx.coroutines.*
@@ -17,6 +18,7 @@ import java.util.*
 
 class EventQueryService(
   private val eventRepository: EventRepository,
+  private val eventsHourlyRepository: EventsHourlyRepository,
   private val projectRepository: ProjectRepository
 ) {
   private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
@@ -40,6 +42,7 @@ class EventQueryService(
             country = pending.country,
             properties = pending.properties
           )
+          eventsHourlyRepository.increment(pending.projectId, pending.eventType, pending.occurredAt)
         }
       }
     }

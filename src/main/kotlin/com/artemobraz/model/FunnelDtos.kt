@@ -41,14 +41,14 @@ data class FunnelDetailResponse(
 data class FunnelStepResponse(
   val id: String,
   val eventType: String,
-  val label: String,
+  val propertyFilters: Map<String, String> = emptyMap(),
   val stepOrder: Int
 )
 
 @Serializable
 data class AddFunnelStepRequest(
   val eventType: String,
-  val label: String
+  val propertyFilters: Map<String, String> = emptyMap()
 )
 
 @Serializable
@@ -66,7 +66,7 @@ data class FunnelAnalysisPeriod(
 data class FunnelStepAnalysis(
   val stepId: String,
   val eventType: String,
-  val label: String,
+  val propertyFilters: Map<String, String> = emptyMap(),
   val stepOrder: Int,
   val usersCount: Long,
   val conversionFromPrevious: Double?,

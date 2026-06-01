@@ -5,7 +5,6 @@ import com.auth0.jwt.algorithms.Algorithm
 import io.ktor.server.application.*
 import io.ktor.server.auth.*
 import io.ktor.server.auth.jwt.*
-import kotlinx.coroutines.future.await
 
 fun Application.configureAuth() {
   val config = environment.config
@@ -24,9 +23,6 @@ fun Application.configureAuth() {
           .build()
       )
       validate { credential ->
-        val jti = credential.payload.id ?: return@validate null
-        val revoked = application.redis.async().exists("revoked:access:$jti").await() > 0L
-        if (revoked) return@validate null
         val userId = credential.payload.getClaim("userId").asString()
         if (userId != null) JWTPrincipal(credential.payload) else null
       }

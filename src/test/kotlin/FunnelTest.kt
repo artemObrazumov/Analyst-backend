@@ -126,12 +126,12 @@ class FunnelTest {
     client.post("/api/projects/$projectId/funnels/$funnelId/steps") {
       contentType(ContentType.Application.Json)
       bearerAuth(token)
-      setBody("""{"eventType":"page_view","label":"Landing"}""")
+      setBody("""{"eventType":"page_view"}""")
     }
     client.post("/api/projects/$projectId/funnels/$funnelId/steps") {
       contentType(ContentType.Application.Json)
       bearerAuth(token)
-      setBody("""{"eventType":"button_click","label":"Buy"}""")
+      setBody("""{"eventType":"button_click"}""")
     }
 
     val response = client.get("/api/projects/$projectId/funnels/$funnelId") {
@@ -189,7 +189,7 @@ class FunnelTest {
     val addResponse = client.post("/api/projects/$projectId/funnels/$funnelId/steps") {
       contentType(ContentType.Application.Json)
       bearerAuth(token)
-      setBody("""{"eventType":"signup","label":"Sign Up"}""")
+      setBody("""{"eventType":"signup"}""")
     }
     assertEquals(HttpStatusCode.Created, addResponse.status)
     val step = json.decodeFromString<FunnelStepResponse>(addResponse.bodyAsText())
@@ -216,14 +216,14 @@ class FunnelTest {
       client.post("/api/projects/$projectId/funnels/$funnelId/steps") {
         contentType(ContentType.Application.Json)
         bearerAuth(token)
-        setBody("""{"eventType":"a","label":"A"}""")
+        setBody("""{"eventType":"a"}""")
       }.bodyAsText()
     )
     val step2 = json.decodeFromString<FunnelStepResponse>(
       client.post("/api/projects/$projectId/funnels/$funnelId/steps") {
         contentType(ContentType.Application.Json)
         bearerAuth(token)
-        setBody("""{"eventType":"b","label":"B"}""")
+        setBody("""{"eventType":"b"}""")
       }.bodyAsText()
     )
 
@@ -280,12 +280,12 @@ class FunnelTest {
     client.post("/api/projects/$projectId/funnels/$funnelId/steps") {
       contentType(ContentType.Application.Json)
       bearerAuth(token)
-      setBody("""{"eventType":"step_one","label":"Step 1"}""")
+      setBody("""{"eventType":"step_one"}""")
     }
     client.post("/api/projects/$projectId/funnels/$funnelId/steps") {
       contentType(ContentType.Application.Json)
       bearerAuth(token)
-      setBody("""{"eventType":"step_two","label":"Step 2"}""")
+      setBody("""{"eventType":"step_two"}""")
     }
 
     val response = client.get("/api/projects/$projectId/funnels/$funnelId/analysis") {
@@ -309,17 +309,17 @@ class FunnelTest {
     client.post("/api/projects/$projectId/funnels/$funnelId/steps") {
       contentType(ContentType.Application.Json)
       bearerAuth(token)
-      setBody("""{"eventType":"funnel_view","label":"View"}""")
+      setBody("""{"eventType":"funnel_view"}""")
     }
     client.post("/api/projects/$projectId/funnels/$funnelId/steps") {
       contentType(ContentType.Application.Json)
       bearerAuth(token)
-      setBody("""{"eventType":"funnel_cart","label":"Cart"}""")
+      setBody("""{"eventType":"funnel_cart"}""")
     }
     client.post("/api/projects/$projectId/funnels/$funnelId/steps") {
       contentType(ContentType.Application.Json)
       bearerAuth(token)
-      setBody("""{"eventType":"funnel_buy","label":"Buy"}""")
+      setBody("""{"eventType":"funnel_buy"}""")
     }
 
     ingestEvent(apiKey, "funnel_view", "u1", "2026-05-20T10:00:00Z")

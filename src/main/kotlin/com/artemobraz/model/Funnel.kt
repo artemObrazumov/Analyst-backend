@@ -1,5 +1,6 @@
 package com.artemobraz.model
 
+import com.artemobraz.utils.jsonb
 import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
 import org.jetbrains.exposed.dao.id.UUIDTable
@@ -18,7 +19,7 @@ object Funnels : UUIDTable("funnels") {
 object FunnelSteps : UUIDTable("funnel_steps") {
   val funnelId = reference("funnel_id", Funnels)
   val eventType = text("event_type")
-  val label = varchar("label", 255)
+  val propertyFilters = jsonb("property_filters").default("{}")
   val stepOrder = integer("step_order")
 }
 
@@ -36,6 +37,6 @@ data class FunnelStepRow(
   val id: UUID,
   val funnelId: UUID,
   val eventType: String,
-  val label: String,
+  val propertyFilters: Map<String, String>,
   val stepOrder: Int
 )

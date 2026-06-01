@@ -74,7 +74,7 @@ fun Route.funnelRoutes(funnelService: FunnelService) {
             val body = call.receive<AddFunnelStepRequest>()
             call.respond(
               HttpStatusCode.Created,
-              funnelService.addStep(userId, projectId, funnelId, body.eventType, body.label)
+              funnelService.addStep(userId, projectId, funnelId, body.eventType, body.propertyFilters)
             )
           }
 

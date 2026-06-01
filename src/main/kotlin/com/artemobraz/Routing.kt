@@ -1,7 +1,6 @@
 package com.artemobraz
 
 import com.artemobraz.plugins.prometheusRegistry
-import com.artemobraz.plugins.redis
 import com.artemobraz.repository.*
 import com.artemobraz.routing.*
 import com.artemobraz.service.*
@@ -18,13 +17,15 @@ fun Application.configureRouting() {
     val userRepository = UserRepository()
     val projectRepository = ProjectRepository()
     val eventRepository = EventRepository()
+    val eventsHourlyRepository = EventsHourlyRepository()
+    val revokedRefreshTokenRepository = RevokedRefreshTokenRepository()
     val experimentRepository = ExperimentRepository()
     val funnelRepository = FunnelRepository()
     val dashboardRepository = DashboardRepository()
-    val authService = AuthService(environment.config, userRepository, redis)
+    val authService = AuthService(environment.config, userRepository, revokedRefreshTokenRepository)
     val userService = UserService(userRepository)
     val projectService = ProjectService(projectRepository)
-    val eventQueryService = EventQueryService(eventRepository, projectRepository)
+    val eventQueryService = EventQueryService(eventRepository, eventsHourlyRepository, projectRepository)
     val experimentService = ExperimentService(experimentRepository, projectRepository)
     val funnelService = FunnelService(funnelRepository, projectRepository, eventRepository)
     val dashboardService = DashboardService(dashboardRepository, projectRepository, eventRepository)

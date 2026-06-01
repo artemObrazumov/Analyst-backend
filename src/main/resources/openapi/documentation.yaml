@@ -1121,7 +1121,7 @@ paths:
   /api/projects/{projectId}/dashboards/{id}:
     get:
       tags: [ dashboards ]
-      summary: "Returns a dashboard with chart configuration"
+      summary: "Returns a dashboard with series configuration"
       operationId: getDashboard
       security:
         - bearerAuth: [ ]
@@ -1179,7 +1179,7 @@ paths:
                 $ref: "#/components/schemas/DashboardResponse"
     delete:
       tags: [ dashboards ]
-      summary: "Deletes a dashboard and all its charts"
+      summary: "Deletes a dashboard and all its series"
       operationId: deleteDashboard
       security:
         - bearerAuth: [ ]
@@ -1203,7 +1203,7 @@ paths:
   /api/projects/{projectId}/dashboards/{id}/page:
     get:
       tags: [ dashboards ]
-      summary: "Returns dashboard page with chart data for rendering"
+      summary: "Returns dashboard page with time-series data"
       operationId: getDashboardPage
       security:
         - bearerAuth: [ ]
@@ -1238,11 +1238,11 @@ paths:
               schema:
                 $ref: "#/components/schemas/DashboardPageResponse"
 
-  /api/projects/{projectId}/dashboards/{id}/charts:
+  /api/projects/{projectId}/dashboards/{id}/series:
     post:
       tags: [ dashboards ]
-      summary: "Adds a chart to the dashboard"
-      operationId: addDashboardChart
+      summary: "Adds a series to the dashboard"
+      operationId: addDashboardSeries
       security:
         - bearerAuth: [ ]
       parameters:
@@ -1263,20 +1263,20 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/AddDashboardChartRequest"
+              $ref: "#/components/schemas/AddDashboardSeriesRequest"
       responses:
         "201":
-          description: "Chart added"
+          description: "Series added"
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/DashboardChartResponse"
+                $ref: "#/components/schemas/DashboardSeriesResponse"
 
-  /api/projects/{projectId}/dashboards/{id}/charts/reorder:
+  /api/projects/{projectId}/dashboards/{id}/series/reorder:
     put:
       tags: [ dashboards ]
-      summary: "Reorders charts on the dashboard"
-      operationId: reorderDashboardCharts
+      summary: "Reorders series on the dashboard"
+      operationId: reorderDashboardSeries
       security:
         - bearerAuth: [ ]
       parameters:
@@ -1297,16 +1297,16 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/ReorderDashboardChartsRequest"
+              $ref: "#/components/schemas/ReorderDashboardSeriesRequest"
       responses:
         "200":
-          description: "Charts reordered"
+          description: "Series reordered"
 
-  /api/projects/{projectId}/dashboards/{id}/charts/{chartId}:
+  /api/projects/{projectId}/dashboards/{id}/series/{seriesId}:
     put:
       tags: [ dashboards ]
-      summary: "Updates a chart on the dashboard"
-      operationId: updateDashboardChart
+      summary: "Updates a series on the dashboard"
+      operationId: updateDashboardSeries
       security:
         - bearerAuth: [ ]
       parameters:
@@ -1322,7 +1322,7 @@ paths:
           schema:
             type: string
             format: uuid
-        - name: chartId
+        - name: seriesId
           in: path
           required: true
           schema:
@@ -1333,19 +1333,19 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/UpdateDashboardChartRequest"
+              $ref: "#/components/schemas/UpdateDashboardSeriesRequest"
       responses:
         "200":
-          description: "Chart updated"
+          description: "Series updated"
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/DashboardChartResponse"
+                $ref: "#/components/schemas/DashboardSeriesResponse"
 
     delete:
       tags: [ dashboards ]
-      summary: "Removes a chart from the dashboard"
-      operationId: removeDashboardChart
+      summary: "Removes a series from the dashboard"
+      operationId: removeDashboardSeries
       security:
         - bearerAuth: [ ]
       parameters:
@@ -1361,7 +1361,7 @@ paths:
           schema:
             type: string
             format: uuid
-        - name: chartId
+        - name: seriesId
           in: path
           required: true
           schema:
@@ -1369,7 +1369,7 @@ paths:
             format: uuid
       responses:
         "204":
-          description: "Chart removed"
+          description: "Series removed"
 
 components:
   schemas:
@@ -1616,21 +1616,24 @@ components:
           format: uuid
         eventType:
           type: string
-        label:
-          type: string
+        propertyFilters:
+          type: object
+          additionalProperties:
+            type: string
         stepOrder:
           type: integer
 
     AddFunnelStepRequest:
       type: object
-      required: [ eventType, label ]
+      required: [ eventType ]
       properties:
         eventType:
           type: string
           example: "button_click"
-        label:
-          type: string
-          example: "Clicked Buy"
+        propertyFilters:
+          type: object
+          additionalProperties:
+            type: string
 
     ReorderFunnelStepsRequest:
       type: object
@@ -1663,8 +1666,10 @@ components:
           format: uuid
         eventType:
           type: string
-        label:
-          type: string
+        propertyFilters:
+          type: object
+          additionalProperties:
+            type: string
         stepOrder:
           type: integer
         usersCount:
@@ -1901,111 +1906,117 @@ components:
         projectId:
           type: string
           format: uuid
-        createdBy:
-          type: string
-          format: uuid
         name:
           type: string
         description:
           type: string
           nullable: true
-        createdAt:
-          type: string
-          format: date-time
-        updatedAt:
-          type: string
-          format: date-time
 
     DashboardDetailResponse:
       allOf:
         - $ref: "#/components/schemas/DashboardResponse"
         - type: object
           properties:
-            charts:
+            series:
               type: array
               items:
-                $ref: "#/components/schemas/DashboardChartResponse"
+                $ref: "#/components/schemas/DashboardSeriesResponse"
 
-    DashboardChartResponse:
+    DashboardSeriesResponse:
       type: object
       properties:
         id:
           type: string
           format: uuid
-        title:
+        label:
           type: string
-        chartType:
+        period:
           type: string
-          enum: [ line, bar, area ]
+          enum: [ 7d, 30d, 90d ]
         eventType:
           type: string
-        chartOrder:
-          type: integer
-        filters:
-          $ref: "#/components/schemas/ChartFilters"
-
-    ChartFilters:
-      type: object
-      properties:
         platform:
+          type: string
+          nullable: true
+        osVersion:
+          type: string
+          nullable: true
+        appVersion:
           type: string
           nullable: true
         country:
           type: string
           nullable: true
           description: "ISO 3166-1 alpha-2 country code"
-        deviceId:
+        propertyFilters:
+          type: object
+          additionalProperties:
+            type: string
+        position:
+          type: integer
+
+    AddDashboardSeriesRequest:
+      type: object
+      required: [ label, eventType ]
+      properties:
+        label:
           type: string
-          nullable: true
-        userId:
+        period:
           type: string
-          nullable: true
-        appVersion:
+          enum: [ 7d, 30d, 90d ]
+          default: 7d
+        eventType:
+          type: string
+        platform:
           type: string
           nullable: true
         osVersion:
           type: string
           nullable: true
-        properties:
+        appVersion:
+          type: string
+          nullable: true
+        country:
+          type: string
+          nullable: true
+        propertyFilters:
           type: object
           additionalProperties:
             type: string
 
-    AddDashboardChartRequest:
+    UpdateDashboardSeriesRequest:
       type: object
-      required: [ title, eventType ]
+      required: [ label, period, eventType ]
       properties:
-        title:
+        label:
           type: string
-        chartType:
+        period:
           type: string
-          enum: [ line, bar, area ]
-          default: line
+          enum: [ 7d, 30d, 90d ]
         eventType:
           type: string
-        filters:
-          $ref: "#/components/schemas/ChartFilters"
+        platform:
+          type: string
+          nullable: true
+        osVersion:
+          type: string
+          nullable: true
+        appVersion:
+          type: string
+          nullable: true
+        country:
+          type: string
+          nullable: true
+        propertyFilters:
+          type: object
+          additionalProperties:
+            type: string
 
-    UpdateDashboardChartRequest:
+    ReorderDashboardSeriesRequest:
       type: object
-      required: [ title, eventType ]
+      required: [ seriesIds ]
       properties:
-        title:
-          type: string
-        chartType:
-          type: string
-          enum: [ line, bar, area ]
-          default: line
-        eventType:
-          type: string
-        filters:
-          $ref: "#/components/schemas/ChartFilters"
-
-    ReorderDashboardChartsRequest:
-      type: object
-      required: [ chartIds ]
-      properties:
-        chartIds:
+        seriesIds:
           type: array
           items:
             type: string
@@ -2023,7 +2034,7 @@ components:
           format: date-time
           nullable: true
 
-    ChartDataPoint:
+    SeriesDataPoint:
       type: object
       properties:
         date:
@@ -2033,26 +2044,40 @@ components:
           type: integer
           format: int64
 
-    DashboardChartWithData:
+    DashboardSeriesWithData:
       type: object
       properties:
         id:
           type: string
           format: uuid
-        title:
+        label:
           type: string
-        chartType:
+        period:
           type: string
         eventType:
           type: string
-        chartOrder:
+        platform:
+          type: string
+          nullable: true
+        osVersion:
+          type: string
+          nullable: true
+        appVersion:
+          type: string
+          nullable: true
+        country:
+          type: string
+          nullable: true
+        propertyFilters:
+          type: object
+          additionalProperties:
+            type: string
+        position:
           type: integer
-        filters:
-          $ref: "#/components/schemas/ChartFilters"
         data:
           type: array
           items:
-            $ref: "#/components/schemas/ChartDataPoint"
+            $ref: "#/components/schemas/SeriesDataPoint"
 
     DashboardPageResponse:
       type: object
@@ -2067,10 +2092,10 @@ components:
           nullable: true
         period:
           $ref: "#/components/schemas/DashboardPagePeriod"
-        charts:
+        series:
           type: array
           items:
-            $ref: "#/components/schemas/DashboardChartWithData"
+            $ref: "#/components/schemas/DashboardSeriesWithData"
 
   securitySchemes:
     bearerAuth:

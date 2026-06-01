@@ -4,7 +4,11 @@ import com.artemobraz.model.*
 import com.artemobraz.repository.DashboardRepository
 import com.artemobraz.repository.EventRepository
 import com.artemobraz.repository.ProjectRepository
+import kotlinx.datetime.Clock
+import kotlinx.datetime.DateTimeUnit
 import kotlinx.datetime.Instant
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.minus
 import java.time.ZoneOffset
 import java.util.*
 
@@ -14,7 +18,7 @@ class DashboardService(
   private val eventRepository: EventRepository
 ) {
 
-  private val validChartTypes = setOf("line", "bar", "area")
+  private val validPeriods = setOf("7d", "30d", "90d")
 
   private suspend fun assertProjectAccess(userId: UUID, projectId: UUID) {
     val project = projectRepository.findById(projectId) ?: throw NotFoundException("Project not found")
@@ -35,14 +39,14 @@ class DashboardService(
   suspend fun createDashboard(userId: UUID, projectId: UUID, name: String, description: String?): DashboardResponse {
     assertProjectAccess(userId, projectId)
     if (name.isBlank()) throw IllegalArgumentException("Dashboard name is required")
-    return dashboardRepository.create(projectId, userId, name, description).toResponse()
+    return dashboardRepository.create(projectId, name, description).toResponse()
   }
 
   suspend fun getDashboard(userId: UUID, projectId: UUID, id: UUID): DashboardDetailResponse {
     assertProjectAccess(userId, projectId)
     val dashboard = assertDashboardBelongsToProject(id, projectId)
-    val charts = dashboardRepository.findCharts(id).map { it.toChartResponse() }
-    return dashboard.toDetailResponse(charts)
+    val series = dashboardRepository.findSeries(id).map { it.toSeriesResponse() }
+    return dashboard.toDetailResponse(series)
   }
 
   suspend fun updateDashboard(
@@ -64,83 +68,75 @@ class DashboardService(
     dashboardRepository.delete(id)
   }
 
-  suspend fun addChart(
+  suspend fun addSeries(
     userId: UUID,
     projectId: UUID,
     dashboardId: UUID,
-    title: String,
-    chartType: String,
+    label: String,
+    period: String,
     eventType: String,
-    filters: ChartFilters
-  ): DashboardChartResponse {
+    platform: String?,
+    osVersion: String?,
+    appVersion: String?,
+    country: String?,
+    propertyFilters: Map<String, String>
+  ): DashboardSeriesResponse {
     assertProjectAccess(userId, projectId)
     assertDashboardBelongsToProject(dashboardId, projectId)
-    if (title.isBlank()) throw IllegalArgumentException("Chart title is required")
+    if (label.isBlank()) throw IllegalArgumentException("Series label is required")
     if (eventType.isBlank()) throw IllegalArgumentException("Event type is required")
-    validateFilters(filters)
-    val normalizedType = chartType.lowercase()
-    if (normalizedType !in validChartTypes) {
-      throw IllegalArgumentException("Chart type must be one of: ${validChartTypes.joinToString()}")
-    }
-    val nextOrder = dashboardRepository.nextChartOrder(dashboardId)
-    return dashboardRepository.addChart(
-      dashboardId, title, normalizedType, eventType, nextOrder, filters
-    ).toChartResponse()
+    validatePeriod(period)
+    validateSeriesFilters(country, propertyFilters)
+    val nextPosition = dashboardRepository.nextSeriesPosition(dashboardId)
+    return dashboardRepository.addSeries(
+      dashboardId, label, period, eventType, platform, osVersion, appVersion, country, propertyFilters, nextPosition
+    ).toSeriesResponse()
   }
 
-  private fun validateFilters(filters: ChartFilters) {
-    filters.country?.let { country ->
-      if (country.length != 2) throw IllegalArgumentException("Country must be a 2-letter ISO code")
-    }
-    filters.properties.forEach { (key, value) ->
-      if (key.isBlank()) throw IllegalArgumentException("Property filter key cannot be blank")
-      if (value.isBlank()) throw IllegalArgumentException("Property filter value cannot be blank")
-    }
-  }
-
-  suspend fun updateChart(
+  suspend fun updateSeries(
     userId: UUID,
     projectId: UUID,
     dashboardId: UUID,
-    chartId: UUID,
-    title: String,
-    chartType: String,
+    seriesId: UUID,
+    label: String,
+    period: String,
     eventType: String,
-    filters: ChartFilters
-  ): DashboardChartResponse {
+    platform: String?,
+    osVersion: String?,
+    appVersion: String?,
+    country: String?,
+    propertyFilters: Map<String, String>
+  ): DashboardSeriesResponse {
     assertProjectAccess(userId, projectId)
     assertDashboardBelongsToProject(dashboardId, projectId)
-    val chart = dashboardRepository.findChartById(chartId) ?: throw NotFoundException("Chart not found")
-    if (chart.dashboardId != dashboardId) throw NotFoundException("Chart not found")
-    if (title.isBlank()) throw IllegalArgumentException("Chart title is required")
+    val series = dashboardRepository.findSeriesById(seriesId) ?: throw NotFoundException("Series not found")
+    if (series.dashboardId != dashboardId) throw NotFoundException("Series not found")
+    if (label.isBlank()) throw IllegalArgumentException("Series label is required")
     if (eventType.isBlank()) throw IllegalArgumentException("Event type is required")
-    validateFilters(filters)
-    val normalizedType = chartType.lowercase()
-    if (normalizedType !in validChartTypes) {
-      throw IllegalArgumentException("Chart type must be one of: ${validChartTypes.joinToString()}")
-    }
-    return dashboardRepository.updateChart(
-      chartId, title, normalizedType, eventType, filters
-    ).toChartResponse()
+    validatePeriod(period)
+    validateSeriesFilters(country, propertyFilters)
+    return dashboardRepository.updateSeries(
+      seriesId, label, period, eventType, platform, osVersion, appVersion, country, propertyFilters
+    ).toSeriesResponse()
   }
 
-  suspend fun removeChart(userId: UUID, projectId: UUID, dashboardId: UUID, chartId: UUID) {
+  suspend fun removeSeries(userId: UUID, projectId: UUID, dashboardId: UUID, seriesId: UUID) {
     assertProjectAccess(userId, projectId)
     assertDashboardBelongsToProject(dashboardId, projectId)
-    val chart = dashboardRepository.findChartById(chartId) ?: throw NotFoundException("Chart not found")
-    if (chart.dashboardId != dashboardId) throw NotFoundException("Chart not found")
-    dashboardRepository.deleteChart(chartId)
+    val series = dashboardRepository.findSeriesById(seriesId) ?: throw NotFoundException("Series not found")
+    if (series.dashboardId != dashboardId) throw NotFoundException("Series not found")
+    dashboardRepository.deleteSeries(seriesId)
   }
 
-  suspend fun reorderCharts(userId: UUID, projectId: UUID, dashboardId: UUID, chartIds: List<String>) {
+  suspend fun reorderSeries(userId: UUID, projectId: UUID, dashboardId: UUID, seriesIds: List<String>) {
     assertProjectAccess(userId, projectId)
     assertDashboardBelongsToProject(dashboardId, projectId)
-    val uuids = chartIds.map { UUID.fromString(it) }
-    val existing = dashboardRepository.findCharts(dashboardId).map { it.id }.toSet()
+    val uuids = seriesIds.map { UUID.fromString(it) }
+    val existing = dashboardRepository.findSeries(dashboardId).map { it.id }.toSet()
     if (uuids.toSet() != existing) {
-      throw IllegalArgumentException("chartIds must contain exactly all charts of the dashboard")
+      throw IllegalArgumentException("seriesIds must contain exactly all series of the dashboard")
     }
-    dashboardRepository.reorderCharts(dashboardId, uuids)
+    dashboardRepository.reorderSeries(dashboardId, uuids)
   }
 
   suspend fun getDashboardPage(
@@ -156,22 +152,28 @@ class DashboardService(
       throw IllegalArgumentException("'from' must be before or equal to 'to'")
     }
 
-    val charts = dashboardRepository.findCharts(dashboardId)
-    val chartsWithData = charts.map { chart ->
-      val sparse = eventRepository.countEventsByDay(projectId, chart.eventType, chart.filters, from, to)
-        .map { ChartDataPoint(date = it.date, count = it.count) }
-      val data = if (from != null && to != null) {
-        fillDailySeriesWithZeros(sparse, from, to)
+    val seriesList = dashboardRepository.findSeries(dashboardId)
+    val seriesWithData = seriesList.map { series ->
+      val (resolvedFrom, resolvedTo) = resolvePeriodRange(series.period, from, to)
+      val filters = series.toSeriesFilters()
+      val sparse = eventRepository.countEventsByDay(projectId, series.eventType, filters, resolvedFrom, resolvedTo)
+        .map { SeriesDataPoint(date = it.date, count = it.count) }
+      val data = if (resolvedFrom != null && resolvedTo != null) {
+        fillDailySeriesWithZeros(sparse, resolvedFrom, resolvedTo)
       } else {
         sparse
       }
-      DashboardChartWithData(
-        id = chart.id.toString(),
-        title = chart.title,
-        chartType = chart.chartType,
-        eventType = chart.eventType,
-        chartOrder = chart.chartOrder,
-        filters = chart.filters,
+      DashboardSeriesWithData(
+        id = series.id.toString(),
+        label = series.label,
+        period = series.period,
+        eventType = series.eventType,
+        platform = series.platform,
+        osVersion = series.osVersion,
+        appVersion = series.appVersion,
+        country = series.country,
+        propertyFilters = series.propertyFilters,
+        position = series.position,
         data = data
       )
     }
@@ -181,19 +183,51 @@ class DashboardService(
       name = dashboard.name,
       description = dashboard.description,
       period = DashboardPagePeriod(from?.toString(), to?.toString()),
-      charts = chartsWithData
+      series = seriesWithData
     )
   }
 
-  /**
-   * Дополняет ряд точками с count = 0 для каждого календарного дня UTC в [from, to].
-   * SQL GROUP BY возвращает только дни с событиями.
-   */
+  private fun validatePeriod(period: String) {
+    if (period !in validPeriods) {
+      throw IllegalArgumentException("Period must be one of: ${validPeriods.joinToString()}")
+    }
+  }
+
+  private fun validateSeriesFilters(country: String?, propertyFilters: Map<String, String>) {
+    country?.let {
+      if (it.length != 2) throw IllegalArgumentException("Country must be a 2-letter ISO code")
+    }
+    propertyFilters.forEach { (key, value) ->
+      if (key.isBlank()) throw IllegalArgumentException("Property filter key cannot be blank")
+      if (value.isBlank()) throw IllegalArgumentException("Property filter value cannot be blank")
+    }
+  }
+
+  private fun resolvePeriodRange(
+    seriesPeriod: String,
+    overrideFrom: Instant?,
+    overrideTo: Instant?
+  ): Pair<Instant?, Instant?> {
+    if (overrideFrom != null || overrideTo != null) {
+      return overrideFrom to overrideTo
+    }
+    validatePeriod(seriesPeriod)
+    val periodTo = Clock.System.now()
+    val days = when (seriesPeriod) {
+      "7d" -> 7
+      "30d" -> 30
+      "90d" -> 90
+      else -> throw IllegalArgumentException("Unsupported period: $seriesPeriod")
+    }
+    val periodFrom = periodTo.minus(days, DateTimeUnit.DAY, TimeZone.UTC)
+    return periodFrom to periodTo
+  }
+
   private fun fillDailySeriesWithZeros(
-    sparse: List<ChartDataPoint>,
+    sparse: List<SeriesDataPoint>,
     from: Instant,
     to: Instant
-  ): List<ChartDataPoint> {
+  ): List<SeriesDataPoint> {
     val countsByDate = sparse.associateBy { it.date }
     var day = java.time.Instant.ofEpochMilli(from.toEpochMilliseconds())
       .atZone(ZoneOffset.UTC)
@@ -203,10 +237,10 @@ class DashboardService(
       .toLocalDate()
     if (day.isAfter(endDay)) return emptyList()
 
-    val result = ArrayList<ChartDataPoint>()
+    val result = ArrayList<SeriesDataPoint>()
     while (!day.isAfter(endDay)) {
       val dateStr = day.toString()
-      result.add(ChartDataPoint(date = dateStr, count = countsByDate[dateStr]?.count ?: 0L))
+      result.add(SeriesDataPoint(date = dateStr, count = countsByDate[dateStr]?.count ?: 0L))
       day = day.plusDays(1)
     }
     return result
@@ -215,30 +249,28 @@ class DashboardService(
   private fun DashboardRow.toResponse() = DashboardResponse(
     id = id.toString(),
     projectId = projectId.toString(),
-    createdBy = createdBy.toString(),
     name = name,
-    description = description,
-    createdAt = createdAt.toString(),
-    updatedAt = updatedAt.toString()
+    description = description
   )
 
-  private fun DashboardRow.toDetailResponse(charts: List<DashboardChartResponse>) = DashboardDetailResponse(
+  private fun DashboardRow.toDetailResponse(series: List<DashboardSeriesResponse>) = DashboardDetailResponse(
     id = id.toString(),
     projectId = projectId.toString(),
-    createdBy = createdBy.toString(),
     name = name,
     description = description,
-    createdAt = createdAt.toString(),
-    updatedAt = updatedAt.toString(),
-    charts = charts
+    series = series
   )
 
-  private fun DashboardChartRow.toChartResponse() = DashboardChartResponse(
+  private fun DashboardSeriesRow.toSeriesResponse() = DashboardSeriesResponse(
     id = id.toString(),
-    title = title,
-    chartType = chartType,
+    label = label,
+    period = period,
     eventType = eventType,
-    chartOrder = chartOrder,
-    filters = filters
+    platform = platform,
+    osVersion = osVersion,
+    appVersion = appVersion,
+    country = country,
+    propertyFilters = propertyFilters,
+    position = position
   )
 }

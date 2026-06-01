@@ -21,11 +21,8 @@ fun Route.userRoutes(userService: UserService, authService: AuthService) {
       }
 
       post("/me/logout") {
-        val principal = call.principal<JWTPrincipal>()!!
-        val accessJti = principal.payload.id!!
-        val accessExp = principal.payload.expiresAt
         val body = call.receive<RefreshRequest>()
-        authService.logout(body.refreshToken, accessJti, accessExp)
+        authService.logout(body.refreshToken)
         call.respond(mapOf("message" to "Logged out"))
       }
     }
