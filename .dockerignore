@@ -1,0 +1,14 @@
+.git
+.gitignore
+.gradle
+.kotlin
+build
+.idea
+*.iml
+.claude
+docs
+scripts
+README.md
+Dockerfile
+docker-compose.yml
+.dockerignore

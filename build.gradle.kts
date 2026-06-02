@@ -97,7 +97,7 @@ tasks.register<JavaExec>("dbMigrate") {
 // ── Docker via Podman ─────────────────────────────────────────────────────────
 
 val podmanMachine = project.findProperty("podmanMachine") as? String ?: "default"
-val composeFile = "${rootProject.projectDir.parent}/docker-compose.yml"
+val composeFile = "${rootProject.projectDir}/docker-compose.yml"
 
 fun findPodman(): String {
   val fromEnv = System.getenv("PODMAN_PATH")
@@ -136,7 +136,7 @@ tasks.register("dockerUp") {
     }
 
     val dockerHost = podmanDockerHost(podmanMachine)
-    val code = ProcessBuilder(podmanBin, "compose", "-f", composeFile, "up", "-d", "--wait")
+    val code = ProcessBuilder(podmanBin, "compose", "-f", composeFile, "up", "-d", "--wait", "postgres", "redis")
       .apply { environment()["DOCKER_HOST"] = dockerHost }
       .inheritIO().start().waitFor()
     if (code != 0) throw GradleException("podman compose up failed (exit $code)")
